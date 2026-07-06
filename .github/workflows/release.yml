@@ -2,12 +2,13 @@ name: Create Release Archive
 
 on:
   push:
+    branches: [main, master]
     tags:
       - 'v*'
   workflow_dispatch:
     inputs:
       version:
-        description: '版本号（留空则自动计算下一个版本）'
+        description: '版本号（留空则自动计算）'
         required: false
         default: ''
 
@@ -27,28 +28,29 @@ jobs:
         id: version
         run: |
           if [ -n "${{ github.event.inputs.version }}" ]; then
-            # 手动触发时使用输入的版本号
+            # 手动触发且填写了版本号
             TAG="v${{ github.event.inputs.version }}"
           elif [ "${{ github.ref_type }}" = "tag" ]; then
-            # 标签触发时使用当前标签
+            # 推送标签触发：直接使用该标签
             TAG="${{ github.ref_name }}"
           else
-            # 自动计算下一个版本号
-            LATEST=$(git tag --sort=-v:refname | grep '^v[0-9]' | head -1 | sed 's/^v//')
+            # 推送 main 或手动触发未填版本号：自动 patch +1
+            LATEST=$(git tag --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -1 | sed 's/^v//')
             if [ -z "$LATEST" ]; then
-              NEXT="1.0"
+              NEXT="2.0.0"
             else
               MAJOR=$(echo "$LATEST" | cut -d. -f1)
               MINOR=$(echo "$LATEST" | cut -d. -f2)
-              NEXT="$MAJOR.$((MINOR + 1))"
+              PATCH=$(echo "$LATEST" | cut -d. -f3)
+              NEXT="$MAJOR.$MINOR.$((PATCH + 1))"
             fi
             TAG="v$NEXT"
           fi
           echo "tag=$TAG" >> $GITHUB_OUTPUT
           echo "版本号: $TAG"
 
-      - name: 创建并推送标签（仅手动触发时）
-        if: github.event_name == 'workflow_dispatch'
+      - name: 创建并推送标签
+        if: github.ref_type != 'tag'
         run: |
           git config user.name "github-actions"
           git config user.email "actions@github.com"
