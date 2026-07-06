@@ -104,10 +104,19 @@
                 </div>
 
                 <div class="form-group">
-                    <label for="scopes">Scopes</label>
-                    <input type="text" id="scopes" name="scopes"
-                           value="{{if .Config}}{{.Config.Scopes}}{{else}}openid profile email{{end}}"
-                           placeholder="openid profile email">
+                    <label>Scopes</label>
+                    <input type="hidden" id="scopes" name="scopes"
+                           value="{{if .Config}}{{.Config.Scopes}}{{else}}openid profile email roles groups{{end}}">
+                    <div style="display:flex;flex-wrap:wrap;gap:0.5rem 1.2rem;font-size:0.85rem;margin-bottom:0.5rem;">
+                        <label style="font-weight:400;cursor:pointer;"><input type="checkbox" value="openid" onchange="syncScopes()" checked> openid (必须)</label>
+                        <label style="font-weight:400;cursor:pointer;"><input type="checkbox" value="profile" onchange="syncScopes()" checked> profile</label>
+                        <label style="font-weight:400;cursor:pointer;"><input type="checkbox" value="email" onchange="syncScopes()" checked> email</label>
+                        <label style="font-weight:400;cursor:pointer;"><input type="checkbox" value="roles" onchange="syncScopes()" checked> roles</label>
+                        <label style="font-weight:400;cursor:pointer;"><input type="checkbox" value="groups" onchange="syncScopes()" checked> groups</label>
+                    </div>
+                    <input type="text" id="scopes-custom" placeholder="自定义 scope（空格分隔）"
+                           style="font-size:0.85rem;" oninput="syncScopes()">
+                    <div class="hint">勾选常用 scope 或输入自定义值，多个用空格分隔</div>
                 </div>
 
                 <div class="form-group">
@@ -243,6 +252,36 @@
                 setTimeout(() => { el.style.background = orig; }, 600);
             }).catch(() => {});
         }
+
+        function syncScopes() {
+            const checked = [];
+            document.querySelectorAll('#scopes ~ div input[type=checkbox]:checked').forEach(cb => {
+                checked.push(cb.value);
+            });
+            const custom = document.getElementById('scopes-custom').value.trim();
+            if (custom) checked.push(custom);
+            document.getElementById('scopes').value = checked.join(' ');
+        }
+
+        function restoreScopes() {
+            const current = document.getElementById('scopes').value;
+            if (!current) return;
+            const parts = current.split(/\s+/);
+            const known = ['openid', 'profile', 'email', 'roles', 'groups'];
+            const checkboxes = document.querySelectorAll('#scopes ~ div input[type=checkbox]');
+            checkboxes.forEach(cb => { cb.checked = false; });
+            const custom = [];
+            parts.forEach(p => {
+                if (known.includes(p)) {
+                    checkboxes.forEach(cb => { if (cb.value === p) cb.checked = true; });
+                } else {
+                    custom.push(p);
+                }
+            });
+            document.getElementById('scopes-custom').value = custom.join(' ');
+        }
+
+        document.addEventListener('DOMContentLoaded', restoreScopes);
     </script>
 </body>
 </html>
