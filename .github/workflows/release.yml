@@ -1,0 +1,33 @@
+name: Create Release Archive
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 打包部署文件
+        run: |
+          mkdir -p release/KyleworksOidcTest
+          cp Dockerfile docker-compose.yml go.mod go.sum .gitignore release/KyleworksOidcTest/
+          cp main.go oidc.go store.go release/KyleworksOidcTest/
+          cp -r templates release/KyleworksOidcTest/
+          cd release
+          tar -czf KyleworksOidcTest.tar.gz KyleworksOidcTest/
+
+      - name: 创建 Release 并上传
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/KyleworksOidcTest.tar.gz
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
