@@ -4,6 +4,8 @@ services:
     # 本地开发时，用下面这行替换上面，并注释 image:
     # build: .
     container_name: kyleworks-oidc-test
+    init: true
+    stop_grace_period: 10s
     ports:
       - "61000:61000"
     volumes:

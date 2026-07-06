@@ -54,11 +54,11 @@
 - 不做防御性编程
 - Docker Compose 一键部署
 - Web 表单配置，不依赖 .env
-- 不做并发锁、不做请求重试、不做优雅关闭
 - Keycloak 同为测试环境，不过度考虑异常场景
 
 ### 5. 必须遵守
 - 不确定的内容请由人工决策，并附上解释
+- 禁止直接进行 Git Push 等操作，需要人工决定
 ## 🚫 严格禁止
 
 以下行为在任何情况下都**不允许**，违反即视为设计错误：
@@ -92,13 +92,12 @@
 - ❌ 添加 TypeScript / Babel / Webpack / Vite 等构建工具
 - ❌ 添加单元测试 / 集成测试 / E2E 测试
 - ❌ 添加 ESLint / Prettier / golangci-lint
-- ❌ 添加 CI/CD 配置（GitHub Actions 等） — **例外**：`.github/workflows/docker-publish.yml` 用于自动构建 Docker 镜像并推送到 GHCR，属于部署自动化而非测试/检查类 CI
-- ❌ 添加 Graceful Shutdown / Signal Handling
+- ❌ 在未与用户确认的前提下，自主添加 CI/CD 配置（GitHub Actions 等
 - ❌ 添加 Docker Healthcheck
 - ❌ 添加请求超时 / 重试逻辑
 - ❌ 添加并发锁（sync.Mutex 等）
 - ❌ 将项目拆分为超过约 3-5 个 Go 文件（main.go + oidc.go + store.go 足够）
-- ❌ 添加超过 2 个 HTML 模板（index.html + result.html 足够）
+- ❌ 添加超过约 2-4 个 HTML 模板（index.html + result.html 足够）
 
 ### 数据类
 - ❌ 添加 Redis / PostgreSQL / MySQL 等外部数据库

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -8,7 +9,10 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -720,8 +724,26 @@ func main() {
 	http.HandleFunc("/client-credentials", app.handleClientCredentials)
 	http.HandleFunc("/discover", app.handleDiscover)
 
+	// HTTP 服务器
+	srv := &http.Server{
+		Addr: ":61000",
+	}
+
+	// 监听退出信号（Ctrl+C 或 docker stop）
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+
+	go func() {
+		<-quit
+		log.Println("正在关闭服务...")
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		srv.Shutdown(ctx)
+	}()
+
 	log.Println("[OK] 服务已启动: http://0.0.0.0:61000")
-	if err := http.ListenAndServe(":61000", nil); err != nil {
+	if err := srv.ListenAndServe(); err != http.ErrServerClosed {
 		log.Fatalf("服务启动失败: %v", err)
 	}
+	log.Println("服务已安全退出")
 }
