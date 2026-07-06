@@ -117,6 +117,35 @@ var funcMap = template.FuncMap{
 		}
 		return total
 	},
+	"claimLabel": claimLabel,
+}
+
+// claimLabel 为常见 OIDC Claim 字段添加中文标注
+var claimLabels = map[string]string{
+	"sub":                "sub (Subject — 用户唯一标识)",
+	"iss":                "iss (Issuer — 签发者)",
+	"aud":                "aud (Audience — 目标受众)",
+	"exp":                "exp (Expiration — 过期时间)",
+	"iat":                "iat (Issued At — 签发时间)",
+	"auth_time":          "auth_time (Authentication Time — 认证时间)",
+	"nonce":              "nonce (随机数)",
+	"azp":                "azp (Authorized Party — 授权方)",
+	"scope":              "scope (权限范围)",
+	"name":               "name (姓名)",
+	"given_name":         "given_name (名)",
+	"family_name":        "family_name (姓)",
+	"preferred_username": "preferred_username (用户名)",
+	"email":              "email (邮箱)",
+	"email_verified":     "email_verified (邮箱已验证)",
+	"locale":             "locale (语言/地区)",
+	"session_state":      "session_state (会话状态)",
+}
+
+func claimLabel(key string) string {
+	if label, ok := claimLabels[key]; ok {
+		return label
+	}
+	return key
 }
 
 // ============================================================
@@ -675,14 +704,14 @@ func (app *App) renderError(w http.ResponseWriter, msg string) {
 	w.WriteHeader(http.StatusInternalServerError)
 	fmt.Fprintf(w, `<!DOCTYPE html>
 <html lang="zh-CN">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>错误 — OIDC Playground</title>
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>错误 — KeyCloak OIDC 模拟测试</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#f5f5f5;color:#333;min-height:100vh}.container{max-width:640px;margin:0 auto;padding:2rem 1rem}h1{font-size:1.5rem;margin-bottom:1rem}.card{background:#fff;border-radius:8px;padding:1.5rem;box-shadow:0 1px 3px rgba(0,0,0,0.1);border-left:3px solid #e04040}.btn{display:inline-block;padding:0.5rem 1.2rem;border:none;border-radius:4px;font-size:0.85rem;cursor:pointer;text-decoration:none;background:#4a90d9;color:#fff;margin-top:1rem}.btn:hover{background:#3a7bc8}
 </style>
 </head>
 <body>
 <div class="container">
-<h1>OIDC Playground</h1>
+<h1>KeyCloak OIDC 模拟测试</h1>
 <div class="card">
 <h2 style="color:#d03030;font-size:1rem;margin-bottom:0.5rem;">发生错误</h2>
 <p style="font-size:0.9rem;">%s</p>

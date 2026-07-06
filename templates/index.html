@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OIDC Playground</title>
+    <title>KeyCloak OIDC 模拟测试</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f5f5f5; color: #333; min-height: 100vh; }
@@ -46,7 +46,7 @@
 </head>
 <body>
     <div class="container">
-        <h1>OIDC Playground</h1>
+        <h1>KeyCloak OIDC 模拟测试</h1>
 
         {{if and .Config (not .IsEditing)}}
         <!-- 状态 2: 已配置 → 显示操作按钮 -->
@@ -146,6 +146,23 @@
                     <tr><td>Client ID (UUID)</td><td><span id="uuid-display"><code style="color:#888;">点击生成随机 UUID</code></span> <button type="button" class="btn btn-outline btn-sm" onclick="generateUUID()" style="margin-left:0.5rem;">生成</button></td></tr>
                 </table>
                 <div class="hint" style="margin-top: 0.5rem;">以上由当前访问地址自动生成，点击可复制。Base URL 为 <strong>{{.AutoBaseURL}}</strong></div>
+            </div>
+        </div>
+
+        <!-- Scope 说明 -->
+        <div class="card card-accent">
+            <h2>常用 Scope 说明</h2>
+            <div style="font-size:0.8rem;line-height:1.8;">
+                <code>openid</code> <strong>必须</strong>，启用 OIDC 认证，获取 ID Token<br>
+                <code>profile</code> 用户基本信息：姓名、用户名、头像等<br>
+                <code>email</code> 邮箱地址及是否已验证<br>
+                <code>offline_access</code> 获取 Refresh Token，支持长期离线刷新<br>
+                <code>roles</code> 用户角色信息<br>
+                <code>groups</code> 用户所属组<br>
+                <code>phone</code> 电话号码<br>
+                <code>address</code> 地址信息<br>
+            </div>
+            <div class="hint" style="margin-top:0.5rem;">多个 scope 用空格分隔，如 <code>openid profile email</code></div>
             </div>
         </div>
     </div>
