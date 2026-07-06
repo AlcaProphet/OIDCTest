@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OIDC Playground</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f5f5f5; color: #333; min-height: 100vh; }
+        .container { max-width: 720px; margin: 0 auto; padding: 2rem 1rem; }
+        h1 { font-size: 1.5rem; margin-bottom: 1.5rem; color: #1a1a1a; }
+        h2 { font-size: 1.1rem; margin-bottom: 0.75rem; color: #444; }
+        .card { background: #fff; border-radius: 8px; padding: 1.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 1rem; }
+        .card-accent { border-left: 3px solid #4a90d9; }
+        .form-group { margin-bottom: 1rem; }
+        .form-row { display: flex; gap: 0.5rem; align-items: flex-end; }
+        .form-row .form-group { flex: 1; margin-bottom: 0; }
+        label { display: block; font-size: 0.875rem; font-weight: 600; margin-bottom: 0.25rem; color: #555; }
+        input, select { width: 100%; padding: 0.5rem 0.75rem; border: 1px solid #d1d1d1; border-radius: 4px; font-size: 0.9rem; }
+        input:focus, select:focus { outline: none; border-color: #4a90d9; box-shadow: 0 0 0 2px rgba(74,144,217,0.2); }
+        .hint { font-size: 0.75rem; color: #888; margin-top: 0.2rem; }
+        .btn { display: inline-block; padding: 0.5rem 1.2rem; border: none; border-radius: 4px; font-size: 0.85rem; cursor: pointer; text-decoration: none; white-space: nowrap; }
+        .btn-primary { background: #4a90d9; color: #fff; }
+        .btn-primary:hover { background: #3a7bc8; }
+        .btn-secondary { background: #6c757d; color: #fff; }
+        .btn-secondary:hover { background: #5a6268; }
+        .btn-outline { background: #fff; color: #4a90d9; border: 1px solid #4a90d9; }
+        .btn-outline:hover { background: #f0f6ff; }
+        .btn-sm { padding: 0.4rem 0.8rem; font-size: 0.8rem; }
+        .btn-group { display: flex; gap: 0.75rem; flex-wrap: wrap; margin-top: 1rem; }
+        .config-info { background: #f9f9f9; padding: 0.75rem; border-radius: 4px; margin-bottom: 1rem; font-size: 0.875rem; }
+        .config-info strong { color: #555; }
+        .kc-card { background: #f0f6ff; border-radius: 4px; padding: 1rem; }
+        .kc-card table { width: 100%; font-size: 0.8rem; border-collapse: collapse; }
+        .kc-card td { padding: 0.25rem 0.5rem; vertical-align: top; }
+        .kc-card td:first-child { font-weight: 600; color: #555; white-space: nowrap; }
+        .kc-card code { font-family: "SF Mono", Menlo, monospace; font-size: 0.75rem; background: #e8e8e8; padding: 0.1rem 0.3rem; border-radius: 2px; word-break: break-all; }
+        .copiable { cursor: pointer; }
+        .copiable:hover code { background: #d0d0d0; }
+        .detect-result { margin-top: 0.5rem; font-size: 0.8rem; }
+        .detect-ok { color: #2a8a2a; }
+        .detect-err { color: #d03030; }
+        .spinner { display: none; width: 0.85rem; height: 0.85rem; border: 2px solid #ccc; border-top-color: #4a90d9; border-radius: 50%; animation: spin 0.6s linear infinite; margin-left: 0.5rem; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>OIDC Playground</h1>
+
+        {{if .Config}}
+        <!-- 状态 2: 已配置 → 显示操作按钮 -->
+        <div class="card">
+            <div class="config-info">
+                <strong>Issuer:</strong> {{.Config.Issuer}}<br>
+                <strong>Client ID:</strong> {{.Config.ClientID}}<br>
+                <strong>流程:</strong>
+                {{if eq .Config.Flow "authcode-pkce"}}Authorization Code + PKCE
+                {{else if eq .Config.Flow "authcode"}}Authorization Code (无 PKCE)
+                {{else}}{{.Config.Flow}}{{end}}
+            </div>
+            <div class="btn-group">
+                <a href="/login" class="btn btn-primary">开始登录</a>
+                <a href="/client-credentials" class="btn btn-secondary">Client Credentials</a>
+                <a href="/?edit=1" class="btn btn-outline">修改配置</a>
+            </div>
+        </div>
+
+        {{else}}
+        <!-- 状态 1: 未配置 → 显示配置表单 -->
+        <div class="card">
+            <form method="POST" action="/config" id="config-form">
+                <div class="form-group">
+                    <label for="issuer">Issuer URL *</label>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <input type="url" id="issuer" name="issuer" required
+                                   placeholder="https://auth.example.com/realms/myrealm">
+                        </div>
+                        <button type="button" class="btn btn-outline btn-sm" id="btn-detect" onclick="detectEndpoints()">
+                            检测端点
+                        </button>
+                        <span class="spinner" id="spinner"></span>
+                    </div>
+                    <div class="hint">Keycloak Realm 的 Issuer 地址，点击"检测端点"自动获取 OIDC 信息</div>
+                    <div class="detect-result" id="detect-result"></div>
+                </div>
+
+                <div class="form-group">
+                    <label for="client_id">Client ID *</label>
+                    <input type="text" id="client_id" name="client_id" required
+                           placeholder="KyleworksOidcTest">
+                </div>
+
+                <div class="form-group">
+                    <label for="client_secret">Client Secret *</label>
+                    <input type="password" id="client_secret" name="client_secret" required
+                           placeholder="••••••••">
+                </div>
+
+                <div class="form-group">
+                    <label for="scopes">Scopes</label>
+                    <input type="text" id="scopes" name="scopes"
+                           value="openid profile email"
+                           placeholder="openid profile email">
+                </div>
+
+                <div class="form-group">
+                    <label for="flow">流程</label>
+                    <select id="flow" name="flow">
+                        <option value="authcode-pkce">Authorization Code + PKCE (推荐)</option>
+                        <option value="authcode">Authorization Code (无 PKCE)</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="base_url">Base URL</label>
+                    <input type="url" id="base_url" name="base_url"
+                           value="{{.AutoBaseURL}}"
+                           placeholder="{{.AutoBaseURL}}">
+                    <div class="hint">回调地址前缀，自动从请求头检测，可手动覆盖</div>
+                </div>
+
+                <div class="btn-group">
+                    <button type="submit" class="btn btn-primary">保存配置</button>
+                </div>
+            </form>
+        </div>
+        {{end}}
+
+        <!-- Keycloak 客户端配置参考 -->
+        <div class="card card-accent">
+            <h2>Keycloak 客户端配置参考</h2>
+            <div class="kc-card">
+                <table>
+                    <tr><td>Root URL</td><td class="copiable" onclick="copyText(this)" title="点击复制"><code>{{.AutoBaseURL}}/</code></td></tr>
+                    <tr><td>Home URL</td><td class="copiable" onclick="copyText(this)" title="点击复制"><code>{{.AutoBaseURL}}/</code></td></tr>
+                    <tr><td>Valid Redirect URIs</td><td class="copiable" onclick="copyText(this)" title="点击复制"><code>{{.AutoBaseURL}}/callback</code></td></tr>
+                    <tr><td>Post Logout Redirect URIs</td><td class="copiable" onclick="copyText(this)" title="点击复制"><code>{{.AutoBaseURL}}/</code></td></tr>
+                    <tr><td>Web Origins</td><td class="copiable" onclick="copyText(this)" title="点击复制"><code>{{.AutoBaseURL}}</code></td></tr>
+                </table>
+                <div class="hint" style="margin-top: 0.5rem;">以上由当前访问地址自动生成，点击可复制。Base URL 为 <strong>{{.AutoBaseURL}}</strong></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        async function detectEndpoints() {
+            const issuer = document.getElementById('issuer').value.trim();
+            const resultDiv = document.getElementById('detect-result');
+            const btn = document.getElementById('btn-detect');
+            const spinner = document.getElementById('spinner');
+
+            if (!issuer) {
+                resultDiv.innerHTML = '<span class="detect-err">请先输入 Issuer URL</span>';
+                return;
+            }
+
+            btn.disabled = true;
+            spinner.style.display = 'inline-block';
+            resultDiv.innerHTML = '';
+
+            try {
+                const resp = await fetch('/discover?issuer=' + encodeURIComponent(issuer));
+                const data = await resp.json();
+
+                if (data.error) {
+                    resultDiv.innerHTML = '<span class="detect-err">检测失败: ' + escapeHtml(data.error) + '</span>';
+                    return;
+                }
+
+                const endpoints = [
+                    { label: 'Authorization Endpoint', value: data.authorization_endpoint },
+                    { label: 'Token Endpoint', value: data.token_endpoint },
+                    { label: 'UserInfo Endpoint', value: data.userinfo_endpoint },
+                    { label: 'End Session Endpoint', value: data.end_session_endpoint },
+                ];
+
+                let html = '<span class="detect-ok">✅ 检测成功</span>';
+                html += '<table style="width:100%;font-size:0.75rem;margin-top:0.3rem;">';
+                for (const ep of endpoints) {
+                    html += '<tr><td style="color:#555;padding:0.15rem 0.5rem 0.15rem 0;">' + ep.label + '</td>';
+                    html += '<td style="word-break:break-all;"><code style="font-size:0.7rem;">' + escapeHtml(ep.value || '(未提供)') + '</code></td></tr>';
+                }
+                html += '</table>';
+                resultDiv.innerHTML = html;
+            } catch (e) {
+                resultDiv.innerHTML = '<span class="detect-err">网络错误: ' + escapeHtml(e.message) + '</span>';
+            } finally {
+                btn.disabled = false;
+                spinner.style.display = 'none';
+            }
+        }
+
+        function copyText(el) {
+            const code = el.querySelector('code').textContent;
+            navigator.clipboard.writeText(code).then(() => {
+                const orig = el.style.background;
+                el.style.background = '#d4edda';
+                setTimeout(() => { el.style.background = orig; }, 600);
+            }).catch(() => {});
+        }
+
+        function escapeHtml(s) {
+            const div = document.createElement('div');
+            div.textContent = s;
+            return div.innerHTML;
+        }
+    </script>
+</body>
+</html>

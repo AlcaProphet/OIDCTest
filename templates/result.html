@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>结果 — OIDC Playground</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f5f5f5; color: #333; min-height: 100vh; }
+        .container { max-width: 900px; margin: 0 auto; padding: 2rem 1rem; }
+        h1 { font-size: 1.5rem; margin-bottom: 1rem; }
+        h2 { font-size: 1.15rem; margin: 1.5rem 0 0.75rem; padding-bottom: 0.25rem; border-bottom: 2px solid #4a90d9; color: #1a1a1a; }
+        h3 { font-size: 1rem; margin: 0.75rem 0 0.5rem; color: #555; }
+        .card { background: #fff; border-radius: 8px; padding: 1.25rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 1rem; }
+        .token-box { background: #f0f0f0; padding: 0.75rem; border-radius: 4px; font-family: "SF Mono", Menlo, monospace; font-size: 0.75rem; word-break: break-all; max-height: 200px; overflow-y: auto; }
+        table { width: 100%; border-collapse: collapse; margin: 0.5rem 0; font-size: 0.8rem; }
+        th { background: #f0f4f8; text-align: left; padding: 0.4rem 0.6rem; font-weight: 600; border: 1px solid #e0e0e0; }
+        td { padding: 0.4rem 0.6rem; border: 1px solid #e0e0e0; word-break: break-all; }
+        .json-block { background: #f8f8f8; padding: 0.75rem; border-radius: 4px; font-family: "SF Mono", Menlo, monospace; font-size: 0.75rem; white-space: pre-wrap; max-height: 400px; overflow-y: auto; }
+        .timeline { border-left: 3px solid #e0e0e0; margin: 0.5rem 0; padding-left: 1rem; }
+        .step { margin-bottom: 0.75rem; padding: 0.5rem 0.75rem; border-radius: 4px; background: #fafafa; }
+        .step.error { background: #fff0f0; border-left: 3px solid #e04040; }
+        .step-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.3rem; }
+        .step-name { font-weight: 600; font-size: 0.85rem; }
+        .step-time { font-size: 0.75rem; color: #888; }
+        .step-detail { font-size: 0.75rem; color: #666; }
+        .step-detail code { background: #eee; padding: 0.1rem 0.3rem; border-radius: 2px; font-size: 0.7rem; }
+        .step-error { color: #d03030; font-size: 0.75rem; margin-top: 0.25rem; }
+        .status-ok { color: #2a8a2a; }
+        .status-err { color: #d03030; }
+        .btn { display: inline-block; padding: 0.5rem 1.2rem; border: none; border-radius: 4px; font-size: 0.85rem; cursor: pointer; text-decoration: none; }
+        .btn-primary { background: #4a90d9; color: #fff; }
+        .btn-primary:hover { background: #3a7bc8; }
+        .btn-danger { background: #d9534f; color: #fff; }
+        .btn-danger:hover { background: #c9302c; }
+        .btn-outline { background: #fff; color: #4a90d9; border: 1px solid #4a90d9; }
+        .btn-outline:hover { background: #f0f6ff; }
+        .btn-group { display: flex; gap: 0.75rem; flex-wrap: wrap; margin: 1.5rem 0; }
+        .empty-state { text-align: center; padding: 3rem 1rem; color: #888; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>OIDC Playground — 结果</h1>
+
+        {{if .Error}}
+        <div class="card empty-state">
+            <p>{{.Error}}</p>
+            <div class="btn-group" style="justify-content: center;">
+                <a href="/" class="btn btn-primary">返回首页</a>
+            </div>
+        </div>
+        {{else if .Session}}
+        {{$s := .Session}}
+        {{$r := .Session.TokenResult}}
+
+        {{if $r}}
+        {{if and (not $r.IDToken) (not $r.AccessToken)}}
+        <div class="card" style="border-left: 3px solid #e0a000; background: #fffdf0;">
+            <strong style="color: #b08000;">⚠ 未获取到 Token</strong>
+            <p style="font-size: 0.8rem; margin-top: 0.25rem; color: #888;">请查看下方调试时间线了解详情。</p>
+        </div>
+        {{end}}
+        <!-- ID Token -->
+        {{if $r.IDToken}}
+        <h2>ID Token</h2>
+        <div class="card">
+            <h3>原始 JWT</h3>
+            <div class="token-box">{{$r.IDToken}}</div>
+
+            {{if $r.IDTokenHeader}}
+            <h3>Header</h3>
+            <table>
+                <tr><th>字段</th><th>值</th></tr>
+                {{range $k, $v := $r.IDTokenHeader}}
+                <tr><td>{{$k}}</td><td>{{$v}}</td></tr>
+                {{end}}
+            </table>
+            {{end}}
+
+            {{if $r.IDTokenClaims}}
+            <h3>Payload (Claims)</h3>
+            <table>
+                <tr><th>字段</th><th>值</th></tr>
+                {{range $k, $v := $r.IDTokenClaims}}
+                <tr><td>{{$k}}</td><td>{{$v}}</td></tr>
+                {{end}}
+            </table>
+            {{end}}
+        </div>
+        {{end}}
+
+        <!-- Access Token -->
+        {{if $r.AccessToken}}
+        <h2>Access Token</h2>
+        <div class="card">
+            <h3>原始值</h3>
+            <div class="token-box">{{$r.AccessToken}}</div>
+
+            {{if $r.AccessTokenJWT}}
+            <h3>解码 Payload (JWT)</h3>
+            <table>
+                <tr><th>字段</th><th>值</th></tr>
+                {{range $k, $v := $r.AccessTokenJWT}}
+                <tr><td>{{$k}}</td><td>{{$v}}</td></tr>
+                {{end}}
+            </table>
+            {{end}}
+
+            <p style="margin-top: 0.5rem; font-size: 0.8rem;">
+                <strong>Token 类型:</strong> {{$r.TokenType}} &nbsp;|&nbsp;
+                <strong>有效期:</strong> {{$r.ExpiresIn}} 秒
+            </p>
+        </div>
+        {{end}}
+
+        <!-- Refresh Token -->
+        {{if $r.RefreshToken}}
+        <h2>Refresh Token</h2>
+        <div class="card">
+            <h3>原始值</h3>
+            <div class="token-box">{{$r.RefreshToken}}</div>
+        </div>
+        {{end}}
+
+        <!-- UserInfo -->
+        {{if $r.UserInfo}}
+        <h2>UserInfo</h2>
+        <div class="card">
+            <div class="json-block">{{formatJSON $r.UserInfo}}</div>
+        </div>
+        {{end}}
+
+        <!-- 调试时间线 -->
+        {{if $s.DebugSteps}}
+        <h2>调试时间线</h2>
+        <div class="card">
+            <div class="timeline">
+                {{range $i, $step := $s.DebugSteps}}
+                <div class="step {{if $step.Error}}error{{end}}">
+                    <div class="step-header">
+                        <span class="step-name">{{add $i 1}}. {{$step.Name}}</span>
+                        <span class="step-time">{{$step.Timestamp.Format "15:04:05.000"}}{{if $step.DurationMs}} · {{$step.DurationMs}} ms{{end}}</span>
+                    </div>
+                    <div class="step-detail">
+                        {{if ne $step.Method "-"}}
+                        <code>{{$step.Method}}</code> {{$step.URL}}
+                        {{end}}
+                        {{if $step.StatusCode}}
+                        <span class="{{if lt $step.StatusCode 400}}status-ok{{else}}status-err{{end}}">
+                            [{{$step.StatusCode}}]
+                        </span>
+                        {{end}}
+                    </div>
+                    {{if $step.Error}}
+                    <div class="step-error">{{$step.Error}}</div>
+                    {{end}}
+                    {{if $step.ReqBody}}
+                    <div style="margin-top: 0.25rem; font-size: 0.7rem; color: #888;">
+                        请求体: <code>{{$step.ReqBody}}</code>
+                    </div>
+                    {{end}}
+                </div>
+                {{end}}
+            </div>
+        </div>
+        {{end}}
+
+        {{end}}
+
+        <!-- 操作按钮 -->
+        <div class="btn-group">
+            <a href="/" class="btn btn-outline">返回首页</a>
+            {{if $r}}
+            {{if $r.IDToken}}
+            <a href="/logout" class="btn btn-danger">退出登录</a>
+            {{end}}
+            {{end}}
+        </div>
+
+        {{else}}
+        <div class="card empty-state">
+            <p>暂无结果。请先完成配置并执行登录操作。</p>
+            <div class="btn-group" style="justify-content: center;">
+                <a href="/" class="btn btn-primary">返回首页</a>
+            </div>
+        </div>
+        {{end}}
+    </div>
+</body>
+</html>
