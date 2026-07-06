@@ -85,7 +85,7 @@
                         </button>
                         <span class="spinner" id="spinner"></span>
                     </div>
-                    <div class="hint">Keycloak 默认格式：https://&lt;域名&gt;/realms/&lt;Realm名&gt;，点击"检测端点"自动获取 OIDC 端点</div>
+                    <div class="hint">Keycloak 默认格式：https://&lt;域名&gt;/realms/&lt;Realm名&gt;，也支持直接粘贴 .well-known/openid-configuration 完整地址，会自动识别并剥离</div>
                     <div class="detect-result" id="detect-result"></div>
                 </div>
 
@@ -177,8 +177,16 @@
     </div>
 
     <script>
+        // normalizeIssuer: 剥离 .well-known/openid-configuration 后缀
+        function normalizeIssuer(url) {
+            url = url.replace(/\/+$/, '');  // 去尾部斜杠
+            url = url.replace(/\/\.well-known\/openid-configuration$/i, '');
+            return url;
+        }
+
         async function detectEndpoints() {
-            const issuer = document.getElementById('issuer').value.trim();
+            const issuerInput = document.getElementById('issuer');
+            let issuer = issuerInput.value.trim();
             const resultDiv = document.getElementById('detect-result');
             const btn = document.getElementById('btn-detect');
             const spinner = document.getElementById('spinner');
@@ -187,6 +195,10 @@
                 resultDiv.innerHTML = '<span class="detect-err">请先输入 Issuer URL</span>';
                 return;
             }
+
+            // 标准化 issuer（剥离 well-known 后缀），同步更新输入框
+            issuer = normalizeIssuer(issuer);
+            issuerInput.value = issuer;
 
             btn.disabled = true;
             spinner.style.display = 'inline-block';

@@ -165,6 +165,17 @@ func detectBaseURL(r *http.Request) string {
 	return proto + "://" + host
 }
 
+// normalizeIssuer 标准化 Issuer URL，自动剥离 .well-known/openid-configuration 后缀（大小写不敏感）
+func normalizeIssuer(issuer string) string {
+	issuer = strings.TrimRight(issuer, "/")
+	// 大小写不敏感地剥离 /.well-known/openid-configuration 后缀
+	suffix := "/.well-known/openid-configuration"
+	if len(issuer) > len(suffix) && strings.EqualFold(issuer[len(issuer)-len(suffix):], suffix) {
+		issuer = issuer[:len(issuer)-len(suffix)]
+	}
+	return issuer
+}
+
 // getEffectiveBaseURL 获取实际使用的 Base URL（手动覆盖优先）
 func getEffectiveBaseURL(r *http.Request, config *OIDCConfig) string {
 	if config != nil && config.BaseURL != "" {
@@ -249,7 +260,7 @@ func (app *App) handleConfig(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 必填非空检查
-	issuer := strings.TrimSpace(r.FormValue("issuer"))
+	issuer := normalizeIssuer(strings.TrimSpace(r.FormValue("issuer")))
 	clientID := strings.TrimSpace(r.FormValue("client_id"))
 	clientSecret := strings.TrimSpace(r.FormValue("client_secret"))
 
@@ -661,7 +672,7 @@ func (app *App) handleClientCredentials(w http.ResponseWriter, r *http.Request) 
 
 // handleDiscover 自动检测 OIDC 端点信息（供配置页 AJAX 调用）
 func (app *App) handleDiscover(w http.ResponseWriter, r *http.Request) {
-	issuer := strings.TrimSpace(r.URL.Query().Get("issuer"))
+	issuer := normalizeIssuer(strings.TrimSpace(r.URL.Query().Get("issuer")))
 	if issuer == "" {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(`{"error":"缺少 issuer 参数"}`))
