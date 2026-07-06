@@ -7,7 +7,7 @@ A lightweight OIDC debugging tool for testing self-hosted Keycloak SSO login flo
 ## Features
 
 - **Zero Config** — All settings via web form; no `.env` or config files needed
-- **Auto Discovery** — One-click OIDC endpoint detection from Issuer URL
+- **Auto Discovery** — One-click OIDC endpoint detection; also accepts full `.well-known/openid-configuration` URLs
 - **Keycloak Helper** — Auto-generates Root URL, Redirect URI, Web Origins — click to copy
 - **Step Debugging** — Every HTTP request logged with method, URL, status code, and duration
 - **Three Flows** — Authorization Code + PKCE / Authorization Code (no PKCE) / Client Credentials
@@ -61,7 +61,7 @@ On first visit, fill in the form:
 
 - **Issuer URL** — Click "Detect Endpoints" to auto-discover OIDC endpoints
 - **Client ID / Client Secret** — Keycloak client credentials
-- **Scopes** — Default: `openid profile email`
+- **Scopes** — Default: `openid profile email roles groups`; checkbox quick-select + custom input
 - **Flow** — Recommended: Authorization Code + PKCE
 - **Base URL** — Auto-detected; can be overridden manually
 
@@ -94,7 +94,7 @@ The results page displays:
 
 | Route | Method | Purpose |
 |------|--------|---------|
-| `/` | GET | Home: config form or action buttons |
+| `/` | GET | Home: config form or action buttons (CC shown after login) |
 | `/config` | POST | Save OIDC configuration |
 | `/discover` | GET | Auto-detect OIDC endpoints (`?issuer=...`) |
 | `/login` | GET | Initiate OIDC login → 302 Keycloak |
@@ -144,7 +144,7 @@ KyleworksOidcTest/
 │   └── result.html      # Token viewer + debug timeline
 ├── Dockerfile           # Multi-stage build
 ├── docker-compose.yml   # Docker Compose deployment
-├── .github/workflows/   # GitHub Actions: auto-build and push image to GHCR
+├── .github/workflows/   # GitHub Actions: auto-build image (docker-publish) + create release archive (release)
 └── nginx-example.conf   # NGINX reverse proxy reference
 ```
 

@@ -7,7 +7,7 @@
 ## 特性
 
 - **零配置** — 全部设置通过 Web 表单完成，无需 `.env` 或配置文件
-- **自动发现** — 输入 Issuer URL 一键检测 OIDC 端点（Authorization / Token / UserInfo / End Session）
+- **自动发现** — 输入 Issuer URL 一键检测 OIDC 端点，也支持直接粘贴 `.well-known/openid-configuration` 完整地址
 - **Keycloak 助手** — 自动生成 Keycloak 客户端所需的 Root URL、Redirect URI、Web Origins 等配置值，点击即复制
 - **步骤可视化** — 每次 HTTP 请求均记录方法、URL、状态码、耗时，按时间线展示
 - **三种流程** — Authorization Code + PKCE / Authorization Code（无 PKCE）/ Client Credentials
@@ -61,7 +61,7 @@ docker compose pull && docker compose up -d
 
 - **Issuer URL** — 输入后点击「检测端点」自动获取 OIDC 端点信息
 - **Client ID / Client Secret** — Keycloak 客户端凭据
-- **Scopes** — 默认 `openid profile email`
+- **Scopes** — 默认 `openid profile email roles groups`，支持复选框快速选择 + 自定义输入
 - **流程** — 推荐 Authorization Code + PKCE
 - **Base URL** — 自动检测，可手动覆盖
 
@@ -94,7 +94,7 @@ docker compose pull && docker compose up -d
 
 | 路由 | 方法 | 功能 |
 |------|------|------|
-| `/` | GET | 首页：未配置→配置表单；已配置→操作按钮 |
+| `/` | GET | 首页：未配置→配置表单；已配置→操作按钮（登录；CC 按钮登录后显示） |
 | `/config` | POST | 保存 OIDC 配置 |
 | `/discover` | GET | 自动检测 OIDC 端点（`?issuer=...`） |
 | `/login` | GET | 发起 OIDC 登录 → 302 Keycloak |
@@ -144,7 +144,7 @@ KyleworksOidcTest/
 │   └── result.html      # Token 查看器 + 调试时间线
 ├── Dockerfile           # 多阶段构建
 ├── docker-compose.yml   # Docker Compose 部署
-├── .github/workflows/   # GitHub Actions 自动构建并推送镜像到 GHCR
+├── .github/workflows/   # GitHub Actions 自动构建镜像（docker-publish）+ 创建 Release 归档（release）
 └── nginx-example.conf   # NGINX 反代参考配置
 ```
 

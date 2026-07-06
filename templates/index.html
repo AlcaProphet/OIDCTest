@@ -63,7 +63,9 @@
             </div>
             <div class="btn-group">
                 <a href="/login" class="btn btn-primary">开始登录</a>
+                {{if .IsLoggedIn}}
                 <a href="/client-credentials" class="btn btn-secondary">Client Credentials</a>
+                {{end}}
                 <a href="/?edit=1" class="btn btn-outline">修改配置</a>
             </div>
         </div>
@@ -106,13 +108,13 @@
                 <div class="form-group">
                     <label>Scopes</label>
                     <input type="hidden" id="scopes" name="scopes"
-                           value="{{if .Config}}{{.Config.Scopes}}{{else}}openid profile email roles groups{{end}}">
+                           value="{{if .Config}}{{.Config.Scopes}}{{else}}openid profile email{{end}}">
                     <div style="display:flex;flex-wrap:wrap;gap:0.5rem 1.2rem;font-size:0.85rem;margin-bottom:0.5rem;">
                         <label style="font-weight:400;cursor:pointer;"><input type="checkbox" value="openid" onchange="syncScopes()" checked> openid (必须)</label>
                         <label style="font-weight:400;cursor:pointer;"><input type="checkbox" value="profile" onchange="syncScopes()" checked> profile</label>
                         <label style="font-weight:400;cursor:pointer;"><input type="checkbox" value="email" onchange="syncScopes()" checked> email</label>
-                        <label style="font-weight:400;cursor:pointer;"><input type="checkbox" value="roles" onchange="syncScopes()" checked> roles</label>
-                        <label style="font-weight:400;cursor:pointer;"><input type="checkbox" value="groups" onchange="syncScopes()" checked> groups</label>
+                        <label style="font-weight:400;cursor:pointer;"><input type="checkbox" value="roles" onchange="syncScopes()"> roles</label>
+                        <label style="font-weight:400;cursor:pointer;"><input type="checkbox" value="groups" onchange="syncScopes()"> groups</label>
                     </div>
                     <input type="text" id="scopes-custom" placeholder="自定义 scope（空格分隔）"
                            style="font-size:0.85rem;" oninput="syncScopes()">

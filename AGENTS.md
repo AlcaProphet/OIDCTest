@@ -90,9 +90,6 @@
 
 ### 工程类
 - ❌ 添加 TypeScript / Babel / Webpack / Vite 等构建工具
-- ❌ 添加单元测试 / 集成测试 / E2E 测试
-- ❌ 添加 ESLint / Prettier / golangci-lint
-- ❌ 在未与用户确认的前提下，自主添加 CI/CD 配置（GitHub Actions 等
 - ❌ 添加 Docker Healthcheck
 - ❌ 添加请求超时 / 重试逻辑
 - ❌ 添加并发锁（sync.Mutex 等）
@@ -114,9 +111,9 @@
 
 ```
 KyleworksOidcTest/
-├── main.go              # 入口 + HTTP 路由 + 模板渲染 (~250行)
-├── oidc.go              # OIDC 手动实现 (~200行)
-├── store.go             # SQLite 存储层 (~80行)
+├── main.go              # 入口 + HTTP 路由 + 模板渲染 (~800行)
+├── oidc.go              # OIDC 手动实现 (~320行)
+├── store.go             # SQLite 存储层 (~170行)
 ├── go.mod               # module KyleworksOidcTest / go 1.22
 ├── templates/
 │   ├── index.html       # 配置表单 / 操作按钮（两种状态）
@@ -125,8 +122,21 @@ KyleworksOidcTest/
 ├── Dockerfile           # 多阶段构建
 ├── docker-compose.yml
 ├── nginx-example.conf
+├── .github/workflows/   # CI/CD 自动构建镜像并创建 Release
 └── .gitignore
 ```
+
+## GitHub Actions
+
+项目包含两个 CI/CD workflow（`.github/workflows/`）：
+
+| Workflow | 触发条件 | 功能 |
+|----------|---------|------|
+| `docker-publish.yml` | push to `main`/`beta` 分支 或 `v*` 标签 | 构建多架构 Docker 镜像，推送到 GHCR |
+| `release.yml` | push to `main`/`beta` 分支 或 `v*` 标签 | 创建 Release 归档（源码 tar.gz） |
+
+- 镜像标签策略: 分支 push → 分支名标签；`main` 分支额外打 `latest`；标签 push → 标签名
+- 均支持手动触发 (`workflow_dispatch`)
 
 ## .gitignore
 
@@ -136,6 +146,9 @@ KyleworksOidcTest
 
 # 数据目录
 data/
+
+# 密钥
+.env
 
 # 系统文件
 .DS_Store
@@ -153,7 +166,7 @@ data/
 
 | 路由 | 方法 | 功能 |
 |------|------|------|
-| `/` | GET | 首页：未配置→配置表单；已配置→操作按钮（登录 + Client Credentials） |
+| `/` | GET | 首页：未配置→配置表单；已配置→操作按钮（登录；Client Credentials 仅在已登录后显示） |
 | `/config` | POST | 保存 OIDC 配置到会话 → 302 到 `/` |
 | `/discover` | GET | 自动检测 OIDC 端点（`?issuer=...`），返回 JSON |
 | `/login` | GET | 发起 OIDC 登录 → 302 到 Keycloak |
@@ -165,6 +178,12 @@ data/
 > 导航方式：**多页跳转**，配置页和结果页为独立页面
 
 ## OIDC 协议实现细节 (oidc.go)
+
+### Issuer URL 标准化
+`normalizeIssuer()` 函数自动处理以下输入格式：
+- 标准格式: `https://auth.example.com/realms/myrealm`
+- 完整 well-known URL: `https://auth.example.com/realms/myrealm/.well-known/openid-configuration`（自动剥离后缀，大小写不敏感）
+- 尾部带斜杠: 自动去除
 
 ### Discovery
 ```
@@ -182,14 +201,17 @@ GET {issuer}/.well-known/openid-configuration
    - POST token endpoint 交换 code
    - 解析响应: access_token, id_token, refresh_token, expires_in
 6. 解码 ID Token: 按 `.` 分割 → base64 解码 header 和 payload → JSON
-7. GET userinfo endpoint (Authorization: Bearer {access_token})
-8. 所有结果存入 SQLite → 302 到 `/result`
+7. 尝试解码 Access Token (若为 JWT，按 `.` ≥ 2 判断)
+8. GET userinfo endpoint (Authorization: Bearer {access_token})
+9. 所有结果存入 SQLite → 302 到 `/result`
+
+> 回调同时处理 Keycloak 错误参数 (`error` / `error_description`)：若存在则记录错误步骤，保存到 session 后重定向到 `/result` 展示。
 
 ### Auth Code (无 PKCE) 流程
 与上述流程相同，但**跳过步骤 2-3**（不生成 code_verifier/code_challenge），authorization URL 不含 `code_challenge` 参数，token 交换时不含 `code_verifier`。
 
 ### Client Credentials 流程
-1. 生成 session ID → 写 Cookie → 创建 session 行
+1. Discovery 获取 token endpoint
 2. POST `{token_endpoint}`（scope 使用配置表单中的 Scopes 字段）:
    ```
    grant_type=client_credentials&
@@ -199,15 +221,18 @@ GET {issuer}/.well-known/openid-configuration
    ```
 3. 解析 access_token
 4. 可选用 access_token 调用 userinfo (如果 Keycloak 支持)
-5. 结果存入 SQLite → 302 到 `/result`
+5. 生成 session ID → 写 Cookie → 创建 session 行
+6. 结果存入 SQLite → 302 到 `/result`
 
 ### 退出
 ```
 {end_session_endpoint}?
+  client_id={client_id}&
   post_logout_redirect_uri={base_url}&
   id_token_hint={id_token}
 ```
-同时销毁本地会话
+- `client_id` 始终包含（当 `id_token_hint` 缺失时 Keycloak 要求必填）
+- 同时销毁本地会话和 Cookie
 
 ## 会话结构 (Go struct)
 
@@ -240,17 +265,19 @@ type DebugStep struct {
     StatusCode   int
     RespBody     string
     Error        string
+    DurationMs   int64     // 步骤耗时（毫秒）
 }
 
 type TokenResult struct {
-    AccessToken  string
-    TokenType    string
-    ExpiresIn    int
-    RefreshToken string
-    IDToken      string
+    AccessToken    string
+    TokenType      string
+    ExpiresIn      int
+    RefreshToken   string
+    IDToken        string
     IDTokenHeader  map[string]interface{}
     IDTokenClaims  map[string]interface{}
-    UserInfo    map[string]interface{}
+    UserInfo       map[string]interface{}
+    AccessTokenJWT map[string]interface{}  // Access Token 若为 JWT 则解码
 }
 ```
 
@@ -260,17 +287,19 @@ type TokenResult struct {
 一个页面承载两种状态：
 
 **状态 1: 未配置 → 显示配置表单**
-- Issuer URL (必填)
+- Issuer URL (必填) — 支持直接粘贴 `/.well-known/openid-configuration` 完整地址，自动识别并剥离
+- "检测端点" 按钮 — 自动获取 OIDC 端点信息
 - Client ID (必填)
 - Client Secret (必填)
-- Scopes (默认 "openid profile email")
+- Scopes — 默认 `openid profile email`，使用复选框快速选择（openid/profile/email/roles/groups）+ 自定义输入框
 - Flow (下拉: Auth Code + PKCE / Auth Code。Client Credentials 为独立按钮，不参与此下拉)
 - Base URL (自动检测，可手动覆盖。从 `X-Forwarded-Proto` / `X-Forwarded-Host` 头读取，兜底使用 `Host`)
+- **Keycloak 客户端配置参考卡片** — 自动生成 Root URL、Valid Redirect URIs、Post Logout Redirect URIs、Web Origins 等，点击可复制；附带随机 UUID 生成器
 
 **状态 2: 已配置 → 显示操作按钮**
 - 显示当前 Issuer
 - "开始登录" 按钮
-- "Client Credentials" 按钮
+- "Client Credentials" 按钮（仅在已登录、存在 ID Token 时显示）
 - "修改配置" 链接
 
 ### result.html
@@ -279,12 +308,35 @@ type TokenResult struct {
   - Access Token: 原始值 + 解码后的 payload（如为 JWT）
   - Refresh Token: 原始值（如有）
 - UserInfo 响应 JSON（格式化展示）
+- 常见 OIDC Claim 字段附带中文标注（如 `sub (Subject — 用户唯一标识)`、`email (邮箱)` 等）
 - 按时间线展示每个 DebugStep：
+  - 步骤数、错误数、总耗时汇总行
   - 每步标题 + 耗时 (ms)
   - HTTP Method + URL + 状态码
   - 错误步骤红色高亮
-- 「退出登录」按钮（Auth Code 流程）
-- 「返回首页」链接
+- 「退出登录」按钮（仅 Auth Code 流程、存在 ID Token 时显示）
+- 「返回首页」链接（顶部和底部均放置）
+
+## 模板函数 (main.go)
+
+```go
+// PageData 通用页面数据，传递到所有模板
+type PageData struct {
+    Config      *OIDCConfig
+    Session     *Session
+    Error       string
+    AutoBaseURL string
+    IsEditing   bool
+    IsLoggedIn  bool // 是否有活跃的登录会话（存在 ID Token），控制 CC 按钮显示
+}
+```
+
+模板自定义函数：
+- `formatJSON` — JSON 格式化输出（UserInfo 展示）
+- `add` — 整数加法（步骤序号从 1 开始）
+- `countErrors` — 统计调试步骤中的错误数
+- `sumDuration` — 调试步骤总耗时汇总
+- `claimLabel` — 为常见 OIDC Claim 字段添加中文标注（sub/iss/aud/exp/iat/name/email 等 16 个常用字段）
 
 ## Dockerfile（多阶段构建）
 
@@ -292,6 +344,7 @@ type TokenResult struct {
 # Stage 1: build
 FROM golang:1.22-alpine AS builder
 WORKDIR /app
+# ENV GOPROXY=https://goproxy.cn,https://proxy.golang.org,direct
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
@@ -325,6 +378,8 @@ services:
     # 本地开发时注释 image 行，取消注释 build 行:
     # build: .
     container_name: kyleworks-oidc-test
+    init: true
+    stop_grace_period: 10s
     ports:
       - "61000:61000"
     volumes:
@@ -350,8 +405,10 @@ CREATE TABLE IF NOT EXISTS sessions (
     id TEXT PRIMARY KEY,
     flow TEXT NOT NULL,           -- authcode-pkce | authcode | client-credentials
     config TEXT NOT NULL,         -- JSON: OIDCConfig
+    state TEXT NOT NULL DEFAULT '',       -- OIDC state 参数
+    code_verifier TEXT NOT NULL DEFAULT '', -- PKCE code_verifier
     result TEXT,                  -- JSON: TokenResult (nullable, 登录成功后有)
-    steps TEXT,                   -- JSON: []DebugStep
+    steps TEXT NOT NULL DEFAULT '[]',     -- JSON: []DebugStep
     created_at TEXT NOT NULL
 );
 ```
@@ -373,7 +430,7 @@ CREATE TABLE IF NOT EXISTS sessions (
 ## 启动流程 (main.go)
 
 1. 初始化 SQLite（打开 `/app/data/playground.db`，自动建表）
-2. 注册 `html/template` 自定义函数（`json` 格式化、`since` 时间差）
+2. 注册 `html/template` 自定义函数（`formatJSON`、`add`、`countErrors`、`sumDuration`、`claimLabel`）
 3. 注册所有 HTTP 路由
 4. 监听 `:61000`，输出 `[OK] 服务已启动: http://0.0.0.0:61000`
 

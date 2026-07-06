@@ -84,6 +84,7 @@ type PageData struct {
 	Error       string
 	AutoBaseURL string
 	IsEditing   bool
+	IsLoggedIn  bool // 是否有活跃的登录会话（存在 ID Token）
 }
 
 // ============================================================
@@ -224,12 +225,22 @@ func (app *App) handleIndex(w http.ResponseWriter, r *http.Request) {
 	config, _ := GetConfig(app.db)
 	autoBaseURL := detectBaseURL(r)
 
+	// 检查是否有活跃的登录会话
+	isLoggedIn := false
+	if sid := getSessionCookie(r); sid != "" {
+		sess, _ := GetSession(app.db, sid)
+		if sess != nil && sess.TokenResult != nil && sess.TokenResult.IDToken != "" {
+			isLoggedIn = true
+		}
+	}
+
 	// 如果 URL 带有 ?edit=1 参数，强制显示配置表单并预填已有值
 	if r.URL.Query().Get("edit") == "1" {
 		data := PageData{
 			Config:      config,
 			AutoBaseURL: autoBaseURL,
 			IsEditing:   true,
+			IsLoggedIn:  isLoggedIn,
 		}
 		app.render(w, "index.html", data)
 		return
@@ -243,6 +254,7 @@ func (app *App) handleIndex(w http.ResponseWriter, r *http.Request) {
 	data := PageData{
 		Config:      config,
 		AutoBaseURL: autoBaseURL,
+		IsLoggedIn:  isLoggedIn,
 	}
 	app.render(w, "index.html", data)
 }
@@ -581,10 +593,15 @@ func (app *App) handleLogout(w http.ResponseWriter, r *http.Request) {
 	// 构造 Keycloak 退出 URL
 	if endSessionEndpoint != "" {
 		baseURL := getEffectiveBaseURL(r, &logoutConfig)
-		logoutURL := endSessionEndpoint + "?post_logout_redirect_uri=" + url.QueryEscape(baseURL)
+		params := url.Values{}
+		params.Set("post_logout_redirect_uri", baseURL)
 		if idToken != "" {
-			logoutURL += "&id_token_hint=" + url.QueryEscape(idToken)
+			params.Set("id_token_hint", idToken)
 		}
+		if logoutConfig.ClientID != "" {
+			params.Set("client_id", logoutConfig.ClientID)
+		}
+		logoutURL := endSessionEndpoint + "?" + params.Encode()
 		http.Redirect(w, r, logoutURL, http.StatusSeeOther)
 		return
 	}
