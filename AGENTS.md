@@ -431,3 +431,23 @@ CREATE TABLE IF NOT EXISTS sessions (
 
 `GetUserInfo` 使用 `http.DefaultClient.Do(req)` 而非创建专用 client。项目明确"不做请求超时"，`DefaultClient`（无超时）符合设计意图。
 
+### 7. Client Secret 明文展示
+
+配置表单中 Client Secret 使用 `<input type="text">` 而非 `type="password"`。项目为测试环境，明文展示方便验证复制是否正确。不设密码遮蔽。
+
+### 8. 配置修改时预填已有值
+
+`/?edit=1` 进入编辑模式时，表单自动填入已保存的 Issuer、Client ID、Client Secret、Scopes、Flow、Base URL。通过 `IsEditing` 标志 + `{{if .Config}}` 模板条件实现。
+
+### 9. 调试时间线汇总行
+
+结果页的调试时间线顶部显示步骤数、错误数、总耗时汇总。通过 `countErrors` 和 `sumDuration` 两个模板函数计算。
+
+### 10. 结果页顶部操作按钮
+
+结果页在顶部和底部均放置「返回首页」和「退出登录」按钮，避免长页面下需滚动到底部操作。
+
+### 11. 已配置状态展示完整信息
+
+已配置首页展示 Issuer、Client ID、Scopes、Base URL、流程，方便用户确认当前配置。
+

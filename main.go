@@ -79,6 +79,7 @@ type PageData struct {
 	Session     *Session
 	Error       string
 	AutoBaseURL string
+	IsEditing   bool
 }
 
 // ============================================================
@@ -95,6 +96,22 @@ var funcMap = template.FuncMap{
 	},
 	"add": func(a, b int) int {
 		return a + b
+	},
+	"countErrors": func(steps []DebugStep) int {
+		n := 0
+		for _, s := range steps {
+			if s.Error != "" {
+				n++
+			}
+		}
+		return n
+	},
+	"sumDuration": func(steps []DebugStep) int64 {
+		var total int64
+		for _, s := range steps {
+			total += s.DurationMs
+		}
+		return total
 	},
 }
 
@@ -163,11 +180,12 @@ func (app *App) handleIndex(w http.ResponseWriter, r *http.Request) {
 	config, _ := GetConfig(app.db)
 	autoBaseURL := detectBaseURL(r)
 
-	// 如果 URL 带有 ?edit=1 参数，强制显示配置表单
+	// 如果 URL 带有 ?edit=1 参数，强制显示配置表单并预填已有值
 	if r.URL.Query().Get("edit") == "1" {
 		data := PageData{
-			Config:      nil,
+			Config:      config,
 			AutoBaseURL: autoBaseURL,
+			IsEditing:   true,
 		}
 		app.render(w, "index.html", data)
 		return
@@ -653,11 +671,20 @@ func (app *App) renderError(w http.ResponseWriter, msg string) {
 	w.WriteHeader(http.StatusInternalServerError)
 	fmt.Fprintf(w, `<!DOCTYPE html>
 <html lang="zh-CN">
-<head><meta charset="UTF-8"><title>错误</title></head>
-<body style="font-family: sans-serif; padding: 2rem;">
-<h1>发生错误</h1>
-<p>%s</p>
-<a href="/">返回首页</a>
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>错误 — OIDC Playground</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#f5f5f5;color:#333;min-height:100vh}.container{max-width:640px;margin:0 auto;padding:2rem 1rem}h1{font-size:1.5rem;margin-bottom:1rem}.card{background:#fff;border-radius:8px;padding:1.5rem;box-shadow:0 1px 3px rgba(0,0,0,0.1);border-left:3px solid #e04040}.btn{display:inline-block;padding:0.5rem 1.2rem;border:none;border-radius:4px;font-size:0.85rem;cursor:pointer;text-decoration:none;background:#4a90d9;color:#fff;margin-top:1rem}.btn:hover{background:#3a7bc8}
+</style>
+</head>
+<body>
+<div class="container">
+<h1>OIDC Playground</h1>
+<div class="card">
+<h2 style="color:#d03030;font-size:1rem;margin-bottom:0.5rem;">发生错误</h2>
+<p style="font-size:0.9rem;">%s</p>
+<a href="/" class="btn">返回首页</a>
+</div>
+</div>
 </body>
 </html>`, template.HTMLEscapeString(msg))
 }

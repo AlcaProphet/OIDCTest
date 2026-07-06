@@ -54,6 +54,16 @@
         {{$s := .Session}}
         {{$r := .Session.TokenResult}}
 
+        <!-- 顶部操作按钮 -->
+        <div class="btn-group" style="margin-bottom:1rem;">
+            <a href="/" class="btn btn-outline">返回首页</a>
+            {{if $r}}
+            {{if $r.IDToken}}
+            <a href="/logout" class="btn btn-danger">退出登录</a>
+            {{end}}
+            {{end}}
+        </div>
+
         {{if $r}}
         {{if and (not $r.IDToken) (not $r.AccessToken)}}
         <div class="card" style="border-left: 3px solid #e0a000; background: #fffdf0;">
@@ -135,6 +145,12 @@
         {{if $s.DebugSteps}}
         <h2>调试时间线</h2>
         <div class="card">
+            <div style="font-size:0.8rem;color:#888;margin-bottom:0.75rem;padding-bottom:0.5rem;border-bottom:1px solid #eee;">
+                共 <strong>{{len $s.DebugSteps}}</strong> 步，
+                {{$errCount := countErrors $s.DebugSteps}}
+                {{if $errCount}}<span style="color:#d03030;">{{$errCount}} 个错误</span>{{else}}<span style="color:#2a8a2a;">全部成功</span>{{end}}，
+                总耗时 <strong>{{sumDuration $s.DebugSteps}} ms</strong>
+            </div>
             <div class="timeline">
                 {{range $i, $step := $s.DebugSteps}}
                 <div class="step {{if $step.Error}}error{{end}}">

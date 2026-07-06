@@ -48,12 +48,14 @@
     <div class="container">
         <h1>OIDC Playground</h1>
 
-        {{if .Config}}
+        {{if and .Config (not .IsEditing)}}
         <!-- 状态 2: 已配置 → 显示操作按钮 -->
         <div class="card">
             <div class="config-info">
                 <strong>Issuer:</strong> {{.Config.Issuer}}<br>
                 <strong>Client ID:</strong> {{.Config.ClientID}}<br>
+                <strong>Scopes:</strong> {{.Config.Scopes}}<br>
+                <strong>Base URL:</strong> {{.Config.BaseURL}}<br>
                 <strong>流程:</strong>
                 {{if eq .Config.Flow "authcode-pkce"}}Authorization Code + PKCE
                 {{else if eq .Config.Flow "authcode"}}Authorization Code (无 PKCE)
@@ -75,6 +77,7 @@
                     <div class="form-row">
                         <div class="form-group">
                             <input type="url" id="issuer" name="issuer" required
+                                   value="{{if .Config}}{{.Config.Issuer}}{{end}}"
                                    placeholder="https://auth.example.com/realms/myrealm">
                         </div>
                         <button type="button" class="btn btn-outline btn-sm" id="btn-detect" onclick="detectEndpoints()">
@@ -89,35 +92,36 @@
                 <div class="form-group">
                     <label for="client_id">Client ID *</label>
                     <input type="text" id="client_id" name="client_id" required
-                           value="OidcTest"
+                           value="{{if .Config}}{{.Config.ClientID}}{{else}}OidcTest{{end}}"
                            placeholder="OidcTest">
                 </div>
 
                 <div class="form-group">
                     <label for="client_secret">Client Secret *</label>
-                    <input type="password" id="client_secret" name="client_secret" required
-                           placeholder="从 Credentials 标签页复制">
+                    <input type="text" id="client_secret" name="client_secret" required
+                           value="{{if .Config}}{{.Config.ClientSecret}}{{end}}"
+                           placeholder="从 Keycloak 客户端 Credentials 标签页复制">
                 </div>
 
                 <div class="form-group">
                     <label for="scopes">Scopes</label>
                     <input type="text" id="scopes" name="scopes"
-                           value="openid profile email"
+                           value="{{if .Config}}{{.Config.Scopes}}{{else}}openid profile email{{end}}"
                            placeholder="openid profile email">
                 </div>
 
                 <div class="form-group">
                     <label for="flow">流程</label>
                     <select id="flow" name="flow">
-                        <option value="authcode-pkce">Authorization Code + PKCE (推荐)</option>
-                        <option value="authcode">Authorization Code (无 PKCE)</option>
+                        <option value="authcode-pkce" {{if or (not .Config) (eq .Config.Flow "authcode-pkce")}}selected{{end}}>Authorization Code + PKCE (推荐)</option>
+                        <option value="authcode" {{if and .Config (eq .Config.Flow "authcode")}}selected{{end}}>Authorization Code (无 PKCE)</option>
                     </select>
                 </div>
 
                 <div class="form-group">
                     <label for="base_url">Base URL</label>
                     <input type="url" id="base_url" name="base_url"
-                           value="{{.AutoBaseURL}}"
+                           value="{{if .Config}}{{.Config.BaseURL}}{{else}}{{.AutoBaseURL}}{{end}}"
                            placeholder="{{.AutoBaseURL}}">
                     <div class="hint">回调地址前缀，自动从请求头检测，可手动覆盖</div>
                 </div>
