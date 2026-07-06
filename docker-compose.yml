@@ -1,0 +1,11 @@
+services:
+  kyleworks-oidc-test:
+    image: ghcr.io/alcaprophet/kyleworks-oidc-test:latest
+    # 本地开发时，用下面这行替换上面，并注释 image:
+    # build: .
+    container_name: kyleworks-oidc-test
+    ports:
+      - "61000:61000"
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
