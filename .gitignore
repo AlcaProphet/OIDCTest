@@ -1,0 +1,15 @@
+# 编译产物
+KyleworksOidcTest
+
+# 数据目录
+data/
+
+# 密钥
+.env
+
+# 系统文件
+.DS_Store
+*.log
+
+# 打包产物
+KyleworksOidcTest.tar.gz
