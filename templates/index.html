@@ -82,20 +82,21 @@
                         </button>
                         <span class="spinner" id="spinner"></span>
                     </div>
-                    <div class="hint">Keycloak Realm 的 Issuer 地址，点击"检测端点"自动获取 OIDC 信息</div>
+                    <div class="hint">Keycloak 默认格式：https://&lt;域名&gt;/realms/&lt;Realm名&gt;，点击"检测端点"自动获取 OIDC 端点</div>
                     <div class="detect-result" id="detect-result"></div>
                 </div>
 
                 <div class="form-group">
                     <label for="client_id">Client ID *</label>
                     <input type="text" id="client_id" name="client_id" required
-                           placeholder="KyleworksOidcTest">
+                           value="OidcTest"
+                           placeholder="OidcTest">
                 </div>
 
                 <div class="form-group">
                     <label for="client_secret">Client Secret *</label>
                     <input type="password" id="client_secret" name="client_secret" required
-                           placeholder="••••••••">
+                           placeholder="从 Credentials 标签页复制">
                 </div>
 
                 <div class="form-group">
@@ -138,6 +139,7 @@
                     <tr><td>Valid Redirect URIs</td><td class="copiable" onclick="copyText(this)" title="点击复制"><code>{{.AutoBaseURL}}/callback</code></td></tr>
                     <tr><td>Post Logout Redirect URIs</td><td class="copiable" onclick="copyText(this)" title="点击复制"><code>{{.AutoBaseURL}}/</code></td></tr>
                     <tr><td>Web Origins</td><td class="copiable" onclick="copyText(this)" title="点击复制"><code>{{.AutoBaseURL}}</code></td></tr>
+                    <tr><td>Client ID (UUID)</td><td><span id="uuid-display"><code style="color:#888;">点击生成随机 UUID</code></span> <button type="button" class="btn btn-outline btn-sm" onclick="generateUUID()" style="margin-left:0.5rem;">生成</button></td></tr>
                 </table>
                 <div class="hint" style="margin-top: 0.5rem;">以上由当前访问地址自动生成，点击可复制。Base URL 为 <strong>{{.AutoBaseURL}}</strong></div>
             </div>
@@ -205,6 +207,20 @@
             const div = document.createElement('div');
             div.textContent = s;
             return div.innerHTML;
+        }
+
+        function generateUUID() {
+            const uuid = crypto.randomUUID();
+            const display = document.getElementById('uuid-display');
+            display.innerHTML = '<code style="cursor:pointer;" onclick="copyUUID(this)" title="点击复制">' + uuid + '</code>';
+        }
+
+        function copyUUID(el) {
+            navigator.clipboard.writeText(el.textContent).then(() => {
+                const orig = el.style.background;
+                el.style.background = '#d4edda';
+                setTimeout(() => { el.style.background = orig; }, 600);
+            }).catch(() => {});
         }
     </script>
 </body>
