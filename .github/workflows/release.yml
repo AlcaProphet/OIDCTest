@@ -2,6 +2,7 @@ name: Create Release Archive
 
 on:
   push:
+    branches: [main, beta]
     tags:
       - 'v*'
   workflow_dispatch:
