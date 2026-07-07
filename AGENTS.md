@@ -132,11 +132,15 @@ KyleworksOidcTest/
 
 | Workflow | 触发条件 | 功能 |
 |----------|---------|------|
-| `docker-publish.yml` | push to `main`/`beta` 分支 或 `v*` 标签 | 构建多架构 Docker 镜像，推送到 GHCR |
-| `release.yml` | push to `main`/`beta` 分支 或 `v*` 标签 | 创建 Release 归档（源码 tar.gz） |
+| `docker-publish.yml` | push `main`/`beta` 分支 或 `v*` 标签 | 构建单架构 (amd64) Docker 镜像，推送到 GHCR |
+| `release.yml` | push `v*` 标签 或手动触发 | 创建 Release 归档（源码 tar.gz）+ 自动生成 Release Notes |
 
-- 镜像标签策略: 分支 push → 分支名标签；`main` 分支额外打 `latest`；标签 push → 标签名
-- 均支持手动触发 (`workflow_dispatch`)
+镜像标签策略 (`docker-publish.yml`)：
+- push `main` → `:main`, `:latest`（latest 始终指向最新稳定版）
+- push `beta` → `:beta`（浮动标签，指向最新测试版）
+- push `v3.3.3` → `:3.3.3`, `:3.3`, `:3`（SemVer 三标签，不可变）
+
+均支持手动触发 (`workflow_dispatch`)。
 
 ## .gitignore
 
@@ -152,6 +156,10 @@ data/
 
 # 系统文件
 .DS_Store
+*.log
+
+# 打包产物
+KyleworksOidcTest.tar.gz
 ```
 
 ## 支持的 OIDC 流程
@@ -166,7 +174,7 @@ data/
 
 | 路由 | 方法 | 功能 |
 |------|------|------|
-| `/` | GET | 首页：未配置→配置表单；已配置→操作按钮（登录 + 修改配置） |
+| `/` | GET | 首页：未配置→配置表单；已配置→操作按钮（登录 / Client Credentials / 修改配置） |
 | `/config` | POST | 保存 OIDC 配置到会话 → 302 到 `/` |
 | `/discover` | GET | 自动检测 OIDC 端点（`?issuer=...`），返回 JSON |
 | `/login` | GET | 发起 OIDC 登录 → 302 到 Keycloak |
@@ -239,9 +247,10 @@ GET {issuer}/.well-known/openid-configuration
 ```go
 type Session struct {
     ID           string
+    Flow         string       // "authcode-pkce" | "authcode" | "client-credentials"
     OIDCConfig   OIDCConfig
-    State        string    // OIDC state 参数 (Auth Code 流程)
-    CodeVerifier string    // PKCE code_verifier (Auth Code + PKCE 流程)
+    State        string       // OIDC state 参数 (Auth Code 流程)
+    CodeVerifier string       // PKCE code_verifier (Auth Code + PKCE 流程)
     DebugSteps   []DebugStep
     TokenResult  *TokenResult
     CreatedAt    time.Time
@@ -297,9 +306,10 @@ type TokenResult struct {
 - **Keycloak 客户端配置参考卡片** — 自动生成 Root URL、Valid Redirect URIs、Post Logout Redirect URIs、Web Origins 等，点击可复制；附带随机 UUID 生成器
 
 **状态 2: 已配置 → 显示操作按钮**
-- 显示当前 Issuer
-- "开始登录" 按钮
-- "修改配置" 链接
+- 显示当前 Issuer、Client ID、Scopes、Base URL、流程
+- "开始登录" 按钮（Auth Code 流程）
+- "Client Credentials" 按钮（M2M 流程）
+- "修改配置" 链接（跳转 `/?edit=1`）
 
 ### result.html
 - Token 查看器：
@@ -432,20 +442,6 @@ CREATE TABLE IF NOT EXISTS sessions (
 3. 注册所有 HTTP 路由
 4. 监听 `:61000`，输出 `[OK] 服务已启动: http://0.0.0.0:61000`
 
-## 待办任务清单
-
-- [x] 创建 `go.mod` 并运行 `go mod tidy` (生成 go.sum)
-- [x] 创建 `main.go` — HTTP 路由 + Cookie 会话 + 模板渲染
-- [x] 创建 `oidc.go` — OIDC 协议手动实现
-- [x] 创建 `store.go` — SQLite 存储层
-- [x] 创建 `templates/index.html` — 配置表单 / 操作按钮
-- [x] 创建 `templates/result.html` — Token 查看器 + 调试时间线
-- [x] 创建 `Dockerfile` — 多阶段构建
-- [x] 创建 `docker-compose.yml`
-- [x] 创建 `nginx-example.conf` — 外部 NGINX 反代参考配置
-- [x] 创建 `.gitignore`
-- [x] `docker compose up -d --build` 验证
-
 ## 验证清单
 
 1. `docker compose up -d` 容器正常运行
@@ -473,35 +469,39 @@ CREATE TABLE IF NOT EXISTS sessions (
 
 测试环境，AGENTS.md 已明确"不做防御性编程"。state 是随机 token，暴露在页面上不构成实际风险。保留当前行为。
 
-### 4. handleLogin / handleClientCredentials 中 Discovery 失败不保留调试步骤
-
-此时尚未创建 session，无法跳转到 `/result` 页面展示调试时间线。`renderError` 返回简单错误描述是可接受的降级方案。
-
-### 5. DebugStep 时间戳使用 `time.Now()` 而非请求开始时间
+### 4. DebugStep 时间戳使用 `time.Now()` 而非请求开始时间
 
 每个步骤的 `Timestamp` 字段记录的是步骤记录创建时刻（请求完成后），而非 HTTP 请求发起时刻。对于调试目的，时间戳的精确顺序比绝对精度更重要。`DurationMs` 字段记录了实际网络耗时。
 
-### 6. 使用共享 HTTP Client 发起请求
+### 5. 使用共享 HTTP Client 发起请求
 
 所有 OIDC HTTP 请求（Discovery、Token 交换、UserInfo、Client Credentials）共用同一个 `httpClient`（15 秒超时），避免因 Keycloak 不可达导致请求挂起过久。
 
-### 7. Client Secret 明文展示
+### 6. Client Secret 明文展示
 
 配置表单中 Client Secret 使用 `<input type="text">` 而非 `type="password"`。项目为测试环境，明文展示方便验证复制是否正确。不设密码遮蔽。
 
-### 8. 配置修改时预填已有值
+### 7. 配置修改时预填已有值
 
 `/?edit=1` 进入编辑模式时，表单自动填入已保存的 Issuer、Client ID、Client Secret、Scopes、Flow、Base URL。通过 `IsEditing` 标志 + `{{if .Config}}` 模板条件实现。
 
-### 9. 调试时间线汇总行
+### 8. 调试时间线汇总行
 
 结果页的调试时间线顶部显示步骤数、错误数、总耗时汇总。通过 `countErrors` 和 `sumDuration` 两个模板函数计算。
 
-### 10. 结果页顶部操作按钮
+### 9. 结果页顶部操作按钮
 
 结果页在顶部和底部均放置「返回首页」和「退出登录」按钮，避免长页面下需滚动到底部操作。
 
-### 11. 已配置状态展示完整信息
+### 10. 已配置状态展示完整信息
 
 已配置首页展示 Issuer、Client ID、Scopes、Base URL、流程，方便用户确认当前配置。
+
+### 11. handleLogin / handleClientCredentials 中 Discovery 失败不保留调试步骤
+
+此时尚未创建 session（session 在 Discovery 成功之后才创建），无法跳转到 `/result` 页面展示调试时间线，也无法通过 Cookie 关联调试步骤。`renderError` 返回简单错误描述，直接告知用户根本性错误（Issuer URL 错误/网络不通），比跳转到空结果页更直观。保留当前处理方式。
+
+### 12. GetSession 中 TokenResult JSON 解析失败静默吞错
+
+`GetSession` 从 SQLite 读取 `result` 字段后反序列化时，若 JSON 解析失败仅 `log.Printf` 记录日志，`TokenResult` 保持 `nil`。SQLite 中 JSON 数据损坏概率极低（仅可能在数据库文件被手动篡改时发生），且 `log.Printf` 已写入容器日志供管理员排查。对终端用户而言，看到"暂无结果"与看到"数据损坏"体验差别不大。保留当前处理方式。
 
