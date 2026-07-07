@@ -30,12 +30,16 @@ type TokenResponse struct {
 	IDToken      string `json:"id_token"`
 }
 
+// httpClient 共享 HTTP 客户端，15 秒超时避免 Keycloak 不可达时请求挂起过久
+var httpClient = &http.Client{Timeout: 15 * time.Second}
+
 // Discover 调用 issuer/.well-known/openid-configuration 获取端点
 func Discover(issuer string, steps *[]DebugStep) (*OIDCEndpoints, error) {
 	discoveryURL := strings.TrimRight(issuer, "/") + "/.well-known/openid-configuration"
 
 	start := time.Now()
-	resp, err := http.Get(discoveryURL)
+	req, _ := http.NewRequest("GET", discoveryURL, nil)
+	resp, err := httpClient.Do(req)
 	elapsed := time.Since(start)
 	if err != nil {
 		*steps = append(*steps, DebugStep{
@@ -120,8 +124,11 @@ func ExchangeCode(tokenEndpoint, clientID, clientSecret, redirectURI, code, code
 		form.Set("code_verifier", codeVerifier)
 	}
 
+	reqBody := form.Encode()
 	start := time.Now()
-	resp, err := http.PostForm(tokenEndpoint, form)
+	req, _ := http.NewRequest("POST", tokenEndpoint, strings.NewReader(reqBody))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	resp, err := httpClient.Do(req)
 	elapsed := time.Since(start)
 	if err != nil {
 		*steps = append(*steps, DebugStep{
@@ -129,7 +136,7 @@ func ExchangeCode(tokenEndpoint, clientID, clientSecret, redirectURI, code, code
 			Name:       "Token 交换",
 			Method:     "POST",
 			URL:        tokenEndpoint,
-			ReqBody:    maskSecret(form.Encode(), clientSecret),
+			ReqBody:    maskSecret(reqBody, clientSecret),
 			Error:      err.Error(),
 			DurationMs: elapsed.Milliseconds(),
 		})
@@ -144,7 +151,7 @@ func ExchangeCode(tokenEndpoint, clientID, clientSecret, redirectURI, code, code
 		Name:       "Token 交换",
 		Method:     "POST",
 		URL:        tokenEndpoint,
-		ReqBody:    maskSecret(form.Encode(), clientSecret),
+		ReqBody:    maskSecret(reqBody, clientSecret),
 		StatusCode: resp.StatusCode,
 		RespBody:   truncateBody(body, 2000),
 		DurationMs: elapsed.Milliseconds(),
@@ -171,7 +178,7 @@ func GetUserInfo(userinfoEndpoint, accessToken string, steps *[]DebugStep) (map[
 	req.Header.Set("Authorization", "Bearer "+accessToken)
 
 	start := time.Now()
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := httpClient.Do(req)
 	elapsed := time.Since(start)
 	if err != nil {
 		*steps = append(*steps, DebugStep{
@@ -238,8 +245,11 @@ func ClientCredentials(tokenEndpoint, clientID, clientSecret, scope string, step
 	form.Set("client_secret", clientSecret)
 	form.Set("scope", scope)
 
+	reqBody := form.Encode()
 	start := time.Now()
-	resp, err := http.PostForm(tokenEndpoint, form)
+	req, _ := http.NewRequest("POST", tokenEndpoint, strings.NewReader(reqBody))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	resp, err := httpClient.Do(req)
 	elapsed := time.Since(start)
 	if err != nil {
 		*steps = append(*steps, DebugStep{
@@ -247,7 +257,7 @@ func ClientCredentials(tokenEndpoint, clientID, clientSecret, scope string, step
 			Name:       "Client Credentials",
 			Method:     "POST",
 			URL:        tokenEndpoint,
-			ReqBody:    maskSecret(form.Encode(), clientSecret),
+			ReqBody:    maskSecret(reqBody, clientSecret),
 			Error:      err.Error(),
 			DurationMs: elapsed.Milliseconds(),
 		})
@@ -262,7 +272,7 @@ func ClientCredentials(tokenEndpoint, clientID, clientSecret, scope string, step
 		Name:       "Client Credentials",
 		Method:     "POST",
 		URL:        tokenEndpoint,
-		ReqBody:    maskSecret(form.Encode(), clientSecret),
+		ReqBody:    maskSecret(reqBody, clientSecret),
 		StatusCode: resp.StatusCode,
 		RespBody:   truncateBody(body, 2000),
 		DurationMs: elapsed.Milliseconds(),

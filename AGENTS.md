@@ -91,7 +91,7 @@
 ### 工程类
 - ❌ 添加 TypeScript / Babel / Webpack / Vite 等构建工具
 - ❌ 添加 Docker Healthcheck
-- ❌ 添加请求超时 / 重试逻辑
+- ❌ 添加重试逻辑
 - ❌ 添加并发锁（sync.Mutex 等）
 - ❌ 将项目拆分为超过约 3-5 个 Go 文件（main.go + oidc.go + store.go 足够）
 - ❌ 添加超过约 2-4 个 HTML 模板（index.html + result.html 足够）
@@ -481,9 +481,9 @@ CREATE TABLE IF NOT EXISTS sessions (
 
 每个步骤的 `Timestamp` 字段记录的是步骤记录创建时刻（请求完成后），而非 HTTP 请求发起时刻。对于调试目的，时间戳的精确顺序比绝对精度更重要。`DurationMs` 字段记录了实际网络耗时。
 
-### 6. 使用 `http.DefaultClient` 发起 UserInfo 请求
+### 6. 使用共享 HTTP Client 发起请求
 
-`GetUserInfo` 使用 `http.DefaultClient.Do(req)` 而非创建专用 client。项目明确"不做请求超时"，`DefaultClient`（无超时）符合设计意图。
+所有 OIDC HTTP 请求（Discovery、Token 交换、UserInfo、Client Credentials）共用同一个 `httpClient`（15 秒超时），避免因 Keycloak 不可达导致请求挂起过久。
 
 ### 7. Client Secret 明文展示
 
