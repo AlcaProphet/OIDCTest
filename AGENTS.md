@@ -505,3 +505,7 @@ CREATE TABLE IF NOT EXISTS sessions (
 
 `GetSession` 从 SQLite 读取 `result` 字段后反序列化时，若 JSON 解析失败仅 `log.Printf` 记录日志，`TokenResult` 保持 `nil`。SQLite 中 JSON 数据损坏概率极低（仅可能在数据库文件被手动篡改时发生），且 `log.Printf` 已写入容器日志供管理员排查。对终端用户而言，看到"暂无结果"与看到"数据损坏"体验差别不大。保留当前处理方式。
 
+### 13. Client Credentials 流程不显示退出登录按钮
+
+结果页的「退出登录」按钮仅在存在 ID Token 时显示（`{{if $r.IDToken}}`）。Client Credentials 流程不颁发 ID Token，因此不显示该按钮。CC 为机器对机器流程，无浏览器级别的 Keycloak 登录会话需要销毁，行为正确。保留当前处理方式。
+
