@@ -166,7 +166,7 @@ data/
 
 | 路由 | 方法 | 功能 |
 |------|------|------|
-| `/` | GET | 首页：未配置→配置表单；已配置→操作按钮（登录；Client Credentials 仅在已登录后显示） |
+| `/` | GET | 首页：未配置→配置表单；已配置→操作按钮（登录 + 修改配置） |
 | `/config` | POST | 保存 OIDC 配置到会话 → 302 到 `/` |
 | `/discover` | GET | 自动检测 OIDC 端点（`?issuer=...`），返回 JSON |
 | `/login` | GET | 发起 OIDC 登录 → 302 到 Keycloak |
@@ -292,14 +292,13 @@ type TokenResult struct {
 - Client ID (必填)
 - Client Secret (必填)
 - Scopes — 默认 `openid profile email`，使用复选框快速选择（openid/profile/email/roles/groups）+ 自定义输入框
-- Flow (下拉: Auth Code + PKCE / Auth Code。Client Credentials 为独立按钮，不参与此下拉)
+- Flow (下拉: Auth Code + PKCE / Auth Code)
 - Base URL (自动检测，可手动覆盖。从 `X-Forwarded-Proto` / `X-Forwarded-Host` 头读取，兜底使用 `Host`)
 - **Keycloak 客户端配置参考卡片** — 自动生成 Root URL、Valid Redirect URIs、Post Logout Redirect URIs、Web Origins 等，点击可复制；附带随机 UUID 生成器
 
 **状态 2: 已配置 → 显示操作按钮**
 - 显示当前 Issuer
 - "开始登录" 按钮
-- "Client Credentials" 按钮（仅在已登录、存在 ID Token 时显示）
 - "修改配置" 链接
 
 ### result.html
@@ -327,7 +326,6 @@ type PageData struct {
     Error       string
     AutoBaseURL string
     IsEditing   bool
-    IsLoggedIn  bool // 是否有活跃的登录会话（存在 ID Token），控制 CC 按钮显示
 }
 ```
 

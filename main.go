@@ -84,7 +84,6 @@ type PageData struct {
 	Error       string
 	AutoBaseURL string
 	IsEditing   bool
-	IsLoggedIn  bool // 是否有活跃的登录会话（存在 ID Token）
 }
 
 // ============================================================
@@ -225,22 +224,12 @@ func (app *App) handleIndex(w http.ResponseWriter, r *http.Request) {
 	config, _ := GetConfig(app.db)
 	autoBaseURL := detectBaseURL(r)
 
-	// 检查是否有活跃的登录会话
-	isLoggedIn := false
-	if sid := getSessionCookie(r); sid != "" {
-		sess, _ := GetSession(app.db, sid)
-		if sess != nil && sess.TokenResult != nil && sess.TokenResult.IDToken != "" {
-			isLoggedIn = true
-		}
-	}
-
 	// 如果 URL 带有 ?edit=1 参数，强制显示配置表单并预填已有值
 	if r.URL.Query().Get("edit") == "1" {
 		data := PageData{
 			Config:      config,
 			AutoBaseURL: autoBaseURL,
 			IsEditing:   true,
-			IsLoggedIn:  isLoggedIn,
 		}
 		app.render(w, "index.html", data)
 		return
@@ -254,7 +243,6 @@ func (app *App) handleIndex(w http.ResponseWriter, r *http.Request) {
 	data := PageData{
 		Config:      config,
 		AutoBaseURL: autoBaseURL,
-		IsLoggedIn:  isLoggedIn,
 	}
 	app.render(w, "index.html", data)
 }

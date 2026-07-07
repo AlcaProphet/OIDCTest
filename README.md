@@ -2,6 +2,8 @@
 
 [![Build and Push Docker Image](https://github.com/AlcaProphet/OIDCTest/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/AlcaProphet/OIDCTest/actions/workflows/docker-publish.yml)
 
+[English](README-EN.md) | 中文
+
 轻量级 OIDC 调试工具，用于测试自搭建 Keycloak SSO 的 OIDC 登录流程。类似 Auth0 OIDC Playground，**零配置文件**，全部通过 Web 表单操作。
 
 ## 特性
@@ -10,7 +12,7 @@
 - **自动发现** — 输入 Issuer URL 一键检测 OIDC 端点，也支持直接粘贴 `.well-known/openid-configuration` 完整地址
 - **Keycloak 助手** — 自动生成 Keycloak 客户端所需的 Root URL、Redirect URI、Web Origins 等配置值，点击即复制
 - **步骤可视化** — 每次 HTTP 请求均记录方法、URL、状态码、耗时，按时间线展示
-- **三种流程** — Authorization Code + PKCE / Authorization Code（无 PKCE）/ Client Credentials
+- **两种登录流程** — Authorization Code + PKCE / Authorization Code（无 PKCE）
 - **Token 查看器** — 自动解码 JWT Header 和 Payload，结构化展示 UserInfo
 - **持久化** — SQLite 存储，容器重启配置不丢失
 - **轻量部署** — Go 编译为单一二进制，Docker 镜像约 15MB
@@ -61,16 +63,13 @@ docker compose pull && docker compose up -d
 
 - **Issuer URL** — 输入后点击「检测端点」自动获取 OIDC 端点信息
 - **Client ID / Client Secret** — Keycloak 客户端凭据
-- **Scopes** — 默认 `openid profile email roles groups`，支持复选框快速选择 + 自定义输入
+- **Scopes** — 默认 `openid profile email`，支持复选框快速选择 + 自定义输入
 - **流程** — 推荐 Authorization Code + PKCE
 - **Base URL** — 自动检测，可手动覆盖
 
 ### 2. 测试登录
 
-保存配置后，点击：
-
-- **「开始登录」** — 发起 Authorization Code 流程，跳转 Keycloak 登录后回调展示完整 Token 信息
-- **「Client Credentials」** — 直接获取 Access Token（M2M 场景）
+保存配置后，点击 **「开始登录」** 发起 Authorization Code 流程，跳转 Keycloak 登录后回调展示完整 Token 信息。
 
 ### 3. 查看结果
 
@@ -88,13 +87,13 @@ docker compose pull && docker compose up -d
 |------|------|------|
 | Authorization Code + PKCE | 授权码流程 + PKCE（推荐） | ✅ |
 | Authorization Code（无 PKCE） | 授权码流程，用于对比测试 | ❌ |
-| Client Credentials | 机器对机器，直接获取 Access Token | — |
+| Client Credentials | 机器对机器（后端接口，无前端按钮） | — |
 
 ## 路由
 
 | 路由 | 方法 | 功能 |
 |------|------|------|
-| `/` | GET | 首页：未配置→配置表单；已配置→操作按钮（登录；CC 按钮登录后显示） |
+| `/` | GET | 首页：未配置→配置表单；已配置→操作按钮（登录 + 修改配置） |
 | `/config` | POST | 保存 OIDC 配置 |
 | `/discover` | GET | 自动检测 OIDC 端点（`?issuer=...`） |
 | `/login` | GET | 发起 OIDC 登录 → 302 Keycloak |
@@ -154,4 +153,4 @@ KyleworksOidcTest/
 - Cookie 使用 `HttpOnly`，未设置 `Secure` 标记（支持 HTTP 环境测试）
 - 不做 CSRF / Rate Limiting / Security Headers 等生产级安全防护
 - JWT 仅做 base64 解码展示 Claims，**不验证签名**
-- 不做并发锁 / 请求重试 / 优雅关闭
+- 不做并发锁 / 请求重试
