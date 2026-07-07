@@ -417,7 +417,15 @@ func (app *App) handleCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if code == "" {
-		app.renderError(w, "未收到授权码 (code)")
+		sess.DebugSteps = append(sess.DebugSteps, DebugStep{
+			Timestamp: time.Now(),
+			Name:      "回调错误",
+			Method:    "GET",
+			URL:       r.URL.String(),
+			Error:     "未收到授权码 (code)",
+		})
+		UpdateSessionResult(app.db, sid, TokenResult{}, sess.DebugSteps)
+		http.Redirect(w, r, "/result", http.StatusSeeOther)
 		return
 	}
 
@@ -720,7 +728,7 @@ func (app *App) renderError(w http.ResponseWriter, msg string) {
 	w.WriteHeader(http.StatusInternalServerError)
 	fmt.Fprintf(w, `<!DOCTYPE html>
 <html lang="zh-CN">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>错误 — KeyCloak OIDC 模拟测试</title>
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>错误 — Keycloak OIDC 模拟测试</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#f5f5f5;color:#333;min-height:100vh}.container{max-width:640px;margin:0 auto;padding:2rem 1rem}h1{font-size:1.5rem;margin-bottom:1rem}.card{background:#fff;border-radius:8px;padding:1.5rem;box-shadow:0 1px 3px rgba(0,0,0,0.1);border-left:3px solid #e04040}.btn{display:inline-block;padding:0.5rem 1.2rem;border:none;border-radius:4px;font-size:0.85rem;cursor:pointer;text-decoration:none;background:#4a90d9;color:#fff;margin-top:1rem}.btn:hover{background:#3a7bc8}
 </style>

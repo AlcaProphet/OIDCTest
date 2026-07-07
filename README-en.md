@@ -8,8 +8,8 @@ A lightweight OIDC debugging tool for testing self-hosted Keycloak SSO login flo
 
 ## Features
 
-- **Zero Config** — All settings via web form; no `.env` or config files needed
-- **Auto Discovery** — One-click OIDC endpoint detection; also accepts full `.well-known/openid-configuration` URLs
+- **Zero Config** — No `.env` or config files; all settings via web form
+- **Auto Discovery** — One-click OIDC endpoint detection; accepts full `.well-known/openid-configuration` URLs
 - **Keycloak Helper** — Auto-generates Root URL, Redirect URI, Web Origins — click to copy
 - **Step Debugging** — Every HTTP request logged with method, URL, status code, and duration
 - **Two Login Flows** — Authorization Code + PKCE / Authorization Code (no PKCE)
@@ -22,13 +22,13 @@ A lightweight OIDC debugging tool for testing self-hosted Keycloak SSO login flo
 ### Prerequisites
 
 - Docker and Docker Compose
-- A configured Keycloak instance (or any OIDC-compatible provider)
+- An accessible Keycloak instance (or any OIDC-compatible provider)
 - (Optional) External NGINX for HTTPS reverse proxy
 
 ### Option 1: Build from Source
 
 ```bash
-git clone <your-repo-url> KyleworksOidcTest
+git clone https://github.com/AlcaProphet/OIDCTest.git KyleworksOidcTest
 cd KyleworksOidcTest
 docker compose up -d --build
 ```
@@ -37,11 +37,13 @@ docker compose up -d --build
 
 ```bash
 mkdir KyleworksOidcTest && cd KyleworksOidcTest
-# Download docker-compose.yml, then:
+# Download docker-compose.yml from the repo, then:
 docker compose pull && docker compose up -d
 ```
 
-Visit `http://<server-ip>:61000` to see the configuration page.
+> Image hosted on GitHub Container Registry: `ghcr.io/alcaprophet/kyleworks-oidc-test`
+
+Visit `http://<server-ip>:61000` to access the configuration page.
 
 ### Keycloak Client Setup
 

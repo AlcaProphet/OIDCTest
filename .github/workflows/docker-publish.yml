@@ -1,5 +1,5 @@
 # =============================================================================
-# Workflow: 构建并推送 Docker 镜像到 GitHub Container Registry (GHCR)
+# Workflow: 构建并推送 Docker 镜像 (amd64) 到 GitHub Container Registry (GHCR)
 # =============================================================================
 # 触发条件:
 #   1. push 到 main 或 beta 分支 → 构建分支浮动标签镜像 (日常开发)
@@ -68,8 +68,8 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # ── 步骤 4: 构建并推送多架构镜像 ──
-      # Dockerfile 使用多阶段构建，最终镜像约 15MB
+      # ── 步骤 4: 构建并推送 Docker 镜像 (单架构 amd64) ──
+      # 目标平台: Ubuntu/Debian x86_64，Dockerfile 使用多阶段构建，最终镜像约 15MB
       - name: 构建并推送 Docker 镜像
         uses: docker/build-push-action@v6
         with:
