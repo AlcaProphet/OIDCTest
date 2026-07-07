@@ -605,84 +605,6 @@ func (app *App) handleLogout(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
-// handleClientCredentials Client Credentials 流程
-func (app *App) handleClientCredentials(w http.ResponseWriter, r *http.Request) {
-	config, err := GetConfig(app.db)
-	if err != nil || config == nil {
-		app.renderError(w, "请先完成 OIDC 配置")
-		return
-	}
-
-	// Discovery
-	var steps []DebugStep
-	endpoints, err := Discover(config.Issuer, &steps)
-	if err != nil {
-		app.renderError(w, "OIDC Discovery 失败: "+err.Error())
-		return
-	}
-
-	// 执行 Client Credentials
-	tokenResp, err := ClientCredentials(
-		endpoints.TokenEndpoint,
-		config.ClientID,
-		config.ClientSecret,
-		config.Scopes,
-		&steps,
-	)
-	if err != nil {
-		app.renderError(w, "Client Credentials 流程失败: "+err.Error())
-		return
-	}
-
-	// 尝试解码 Access Token (如果是 JWT)
-	var accessTokenJWT map[string]interface{}
-	if strings.Count(tokenResp.AccessToken, ".") >= 2 {
-		_, accessTokenJWT, _ = DecodeJWT(tokenResp.AccessToken)
-	}
-
-	// 尝试获取 UserInfo
-	var userInfo map[string]interface{}
-	if endpoints.UserinfoEndpoint != "" {
-		userInfo, _ = GetUserInfo(endpoints.UserinfoEndpoint, tokenResp.AccessToken, &steps)
-	}
-
-	// 创建会话存储结果
-	sessionID, err := GenerateRandomString(32)
-	if err != nil {
-		app.renderError(w, "生成 session ID 失败: "+err.Error())
-		return
-	}
-
-	result := TokenResult{
-		AccessToken:    tokenResp.AccessToken,
-		TokenType:      tokenResp.TokenType,
-		ExpiresIn:      tokenResp.ExpiresIn,
-		RefreshToken:   tokenResp.RefreshToken,
-		IDToken:        tokenResp.IDToken,
-		AccessTokenJWT: accessTokenJWT,
-		UserInfo:       userInfo,
-	}
-
-	sess := &Session{
-		ID:           sessionID,
-		Flow:         "client-credentials",
-		OIDCConfig:   *config,
-		DebugSteps:   steps,
-		TokenResult:  &result,
-		CreatedAt:    time.Now(),
-	}
-
-	if err := CreateSession(app.db, sess); err != nil {
-		app.renderError(w, "创建会话失败: "+err.Error())
-		return
-	}
-
-	// 设置 Cookie
-	setSessionCookie(w, sessionID)
-
-	http.Redirect(w, r, "/result", http.StatusSeeOther)
-}
-
 // handleDiscover 自动检测 OIDC 端点信息（供配置页 AJAX 调用）
 func (app *App) handleDiscover(w http.ResponseWriter, r *http.Request) {
 	issuer := normalizeIssuer(strings.TrimSpace(r.URL.Query().Get("issuer")))
@@ -774,7 +696,6 @@ func main() {
 	http.HandleFunc("/callback", app.handleCallback)
 	http.HandleFunc("/result", app.handleResult)
 	http.HandleFunc("/logout", app.handleLogout)
-	http.HandleFunc("/client-credentials", app.handleClientCredentials)
 	http.HandleFunc("/discover", app.handleDiscover)
 
 	// HTTP 服务器

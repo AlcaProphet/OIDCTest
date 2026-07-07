@@ -168,20 +168,18 @@ KyleworksOidcTest.tar.gz
 |------|--------------|------|------|
 | Auth Code + PKCE | `code` | ✅ | 最常用，推荐 |
 | Auth Code (无 PKCE) | `code` | ❌ | 测试用 |
-| Client Credentials | — | — | M2M，grant_type=client_credentials |
 
 ## 页面路由
 
 | 路由 | 方法 | 功能 |
 |------|------|------|
-| `/` | GET | 首页：未配置→配置表单；已配置→操作按钮（登录 / Client Credentials / 修改配置） |
+| `/` | GET | 首页：未配置→配置表单；已配置→操作按钮（登录 / 修改配置） |
 | `/config` | POST | 保存 OIDC 配置到会话 → 302 到 `/` |
 | `/discover` | GET | 自动检测 OIDC 端点（`?issuer=...`），返回 JSON |
 | `/login` | GET | 发起 OIDC 登录 → 302 到 Keycloak |
 | `/callback` | GET | OIDC 回调处理 → 存结果 → 302 到 `/result`（仅支持 GET） |
 | `/result` | GET | 结果页：Token 查看器 + 步骤调试时间线 |
 | `/logout` | GET | 销毁会话 → 302 到 Keycloak end_session_endpoint |
-| `/client-credentials` | GET | Client Credentials 流程 → 存结果 → 302 到 `/result` |
 
 > 导航方式：**多页跳转**，配置页和结果页为独立页面
 
@@ -218,20 +216,6 @@ GET {issuer}/.well-known/openid-configuration
 ### Auth Code (无 PKCE) 流程
 与上述流程相同，但**跳过步骤 2-3**（不生成 code_verifier/code_challenge），authorization URL 不含 `code_challenge` 参数，token 交换时不含 `code_verifier`。
 
-### Client Credentials 流程
-1. Discovery 获取 token endpoint
-2. POST `{token_endpoint}`（scope 使用配置表单中的 Scopes 字段）:
-   ```
-   grant_type=client_credentials&
-   client_id={client_id}&
-   client_secret={client_secret}&
-   scope={scopes}
-   ```
-3. 解析 access_token
-4. 可选用 access_token 调用 userinfo (如果 Keycloak 支持)
-5. 生成 session ID → 写 Cookie → 创建 session 行
-6. 结果存入 SQLite → 302 到 `/result`
-
 ### 退出
 ```
 {end_session_endpoint}?
@@ -247,7 +231,7 @@ GET {issuer}/.well-known/openid-configuration
 ```go
 type Session struct {
     ID           string
-    Flow         string       // "authcode-pkce" | "authcode" | "client-credentials"
+    Flow         string       // "authcode-pkce" | "authcode"
     OIDCConfig   OIDCConfig
     State        string       // OIDC state 参数 (Auth Code 流程)
     CodeVerifier string       // PKCE code_verifier (Auth Code + PKCE 流程)
@@ -308,7 +292,6 @@ type TokenResult struct {
 **状态 2: 已配置 → 显示操作按钮**
 - 显示当前 Issuer、Client ID、Scopes、Base URL、流程
 - "开始登录" 按钮（Auth Code 流程）
-- "Client Credentials" 按钮（M2M 流程）
 - "修改配置" 链接（跳转 `/?edit=1`）
 
 ### result.html
@@ -411,7 +394,7 @@ CREATE TABLE IF NOT EXISTS kv (
 -- 登录会话历史
 CREATE TABLE IF NOT EXISTS sessions (
     id TEXT PRIMARY KEY,
-    flow TEXT NOT NULL,           -- authcode-pkce | authcode | client-credentials
+    flow TEXT NOT NULL,           -- authcode-pkce | authcode
     config TEXT NOT NULL,         -- JSON: OIDCConfig
     state TEXT NOT NULL DEFAULT '',       -- OIDC state 参数
     code_verifier TEXT NOT NULL DEFAULT '', -- PKCE code_verifier
@@ -423,7 +406,7 @@ CREATE TABLE IF NOT EXISTS sessions (
 
 存储策略：
 - `config` 键存储当前 OIDC 配置（JSON），每次 /config POST 更新
-- `/login` 或 `/client-credentials` 触发时**创建新 session 行 + 写入 Cookie**（CC 流程同样需要 session 存储结果）
+- `/login` 触发时**创建新 session 行 + 写入 Cookie**
 - 回调成功后更新 result + steps
 - `/result` 页面从 Cookie 读取 `sid` → 查询 sessions 表 → 显示该 session 的记录
 - 若无 Cookie 或无对应 session 记录，显示"暂无结果"提示 + 返回首页链接
@@ -449,9 +432,8 @@ CREATE TABLE IF NOT EXISTS sessions (
 3. 填写 Keycloak 信息 → 提交 → 显示操作按钮
 4. OIDC 登录 → 跳转 Keycloak → 回调 → 显示 Token 结果和调试步骤
 5. 退出登录 → Keycloak 退出页 → 回到首页未登录状态
-6. Client Credentials 流程 → 显示 Access Token 结果
-7. 外部 NGINX + HTTPS 全流程正常
-8. 容器重启后配置仍保留（SQLite 持久化）
+6. 外部 NGINX + HTTPS 全流程正常
+7. 容器重启后配置仍保留（SQLite 持久化）
 
 ## 已知设计决策（审阅排除项）
 
@@ -461,51 +443,43 @@ CREATE TABLE IF NOT EXISTS sessions (
 
 `handleCallback` 中 `endpoints, err := Discover(...)` 使用 `:=` 遮蔽了外层 `sess, err := GetSession(...)` 的 `err`。这是 Go 惯用写法（因为有新变量 `endpoints`），Go 编译器正确处理，**不产生任何 bug**。且后续代码中 `err` 的引用正好就是 `Discover` 返回的 `err`，逻辑正确。
 
-### 2. Client Credentials 流程 CreateSession 失败时丢失调试步骤
-
-如果 `CreateSession`（SQLite 写入）失败，当前直接调用 `renderError` 返回简单错误页，不保留之前的调试步骤。**SQLite 写入失败概率极低**（磁盘满或权限错误），且此时尚未创建 session 行，无法通过 `/result` 页展示。保留当前处理方式。
-
-### 3. State 验证失败时将完整 state 值写入错误信息
+### 2. State 验证失败时将完整 state 值写入错误信息
 
 测试环境，AGENTS.md 已明确"不做防御性编程"。state 是随机 token，暴露在页面上不构成实际风险。保留当前行为。
 
-### 4. DebugStep 时间戳使用 `time.Now()` 而非请求开始时间
+### 3. DebugStep 时间戳使用 `time.Now()` 而非请求开始时间
 
 每个步骤的 `Timestamp` 字段记录的是步骤记录创建时刻（请求完成后），而非 HTTP 请求发起时刻。对于调试目的，时间戳的精确顺序比绝对精度更重要。`DurationMs` 字段记录了实际网络耗时。
 
-### 5. 使用共享 HTTP Client 发起请求
+### 4. 使用共享 HTTP Client 发起请求
 
-所有 OIDC HTTP 请求（Discovery、Token 交换、UserInfo、Client Credentials）共用同一个 `httpClient`（15 秒超时），避免因 Keycloak 不可达导致请求挂起过久。
+所有 OIDC HTTP 请求（Discovery、Token 交换、UserInfo）共用同一个 `httpClient`（15 秒超时），避免因 Keycloak 不可达导致请求挂起过久。
 
-### 6. Client Secret 明文展示
+### 5. Client Secret 明文展示
 
 配置表单中 Client Secret 使用 `<input type="text">` 而非 `type="password"`。项目为测试环境，明文展示方便验证复制是否正确。不设密码遮蔽。
 
-### 7. 配置修改时预填已有值
+### 6. 配置修改时预填已有值
 
 `/?edit=1` 进入编辑模式时，表单自动填入已保存的 Issuer、Client ID、Client Secret、Scopes、Flow、Base URL。通过 `IsEditing` 标志 + `{{if .Config}}` 模板条件实现。
 
-### 8. 调试时间线汇总行
+### 7. 调试时间线汇总行
 
 结果页的调试时间线顶部显示步骤数、错误数、总耗时汇总。通过 `countErrors` 和 `sumDuration` 两个模板函数计算。
 
-### 9. 结果页顶部操作按钮
+### 8. 结果页顶部操作按钮
 
 结果页在顶部和底部均放置「返回首页」和「退出登录」按钮，避免长页面下需滚动到底部操作。
 
-### 10. 已配置状态展示完整信息
+### 9. 已配置状态展示完整信息
 
 已配置首页展示 Issuer、Client ID、Scopes、Base URL、流程，方便用户确认当前配置。
 
-### 11. handleLogin / handleClientCredentials 中 Discovery 失败不保留调试步骤
+### 10. handleLogin 中 Discovery 失败不保留调试步骤
 
 此时尚未创建 session（session 在 Discovery 成功之后才创建），无法跳转到 `/result` 页面展示调试时间线，也无法通过 Cookie 关联调试步骤。`renderError` 返回简单错误描述，直接告知用户根本性错误（Issuer URL 错误/网络不通），比跳转到空结果页更直观。保留当前处理方式。
 
-### 12. GetSession 中 TokenResult JSON 解析失败静默吞错
+### 11. GetSession 中 TokenResult JSON 解析失败静默吞错
 
 `GetSession` 从 SQLite 读取 `result` 字段后反序列化时，若 JSON 解析失败仅 `log.Printf` 记录日志，`TokenResult` 保持 `nil`。SQLite 中 JSON 数据损坏概率极低（仅可能在数据库文件被手动篡改时发生），且 `log.Printf` 已写入容器日志供管理员排查。对终端用户而言，看到"暂无结果"与看到"数据损坏"体验差别不大。保留当前处理方式。
-
-### 13. Client Credentials 流程不显示退出登录按钮
-
-结果页的「退出登录」按钮仅在存在 ID Token 时显示（`{{if $r.IDToken}}`）。Client Credentials 流程不颁发 ID Token，因此不显示该按钮。CC 为机器对机器流程，无浏览器级别的 Keycloak 登录会话需要销毁，行为正确。保留当前处理方式。
 

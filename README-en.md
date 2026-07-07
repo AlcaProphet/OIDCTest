@@ -89,7 +89,6 @@ The results page displays:
 |------|-------------|------|
 | Authorization Code + PKCE | Auth code flow with PKCE (recommended) | ✅ |
 | Authorization Code (no PKCE) | Auth code flow for comparison testing | ❌ |
-| Client Credentials | Machine-to-machine (backend API, no UI button) | — |
 
 ## Routes
 
@@ -102,7 +101,6 @@ The results page displays:
 | `/callback` | GET | OIDC callback handler |
 | `/result` | GET | Token viewer + debug timeline |
 | `/logout` | GET | Logout (with Keycloak single sign-out) |
-| `/client-credentials` | GET | Client Credentials flow |
 
 ## External NGINX Reverse Proxy
 

@@ -89,7 +89,6 @@ docker compose pull && docker compose up -d
 |------|------|------|
 | Authorization Code + PKCE | 授权码流程 + PKCE（推荐） | ✅ |
 | Authorization Code（无 PKCE） | 授权码流程，用于对比测试 | ❌ |
-| Client Credentials | 机器对机器（后端接口，无前端按钮） | — |
 
 ## 路由
 
@@ -102,7 +101,6 @@ docker compose pull && docker compose up -d
 | `/callback` | GET | OIDC 回调处理 |
 | `/result` | GET | Token 查看器 + 调试时间线 |
 | `/logout` | GET | 退出登录（含 Keycloak 单点登出） |
-| `/client-credentials` | GET | Client Credentials 流程 |
 
 ## 外部 NGINX 反代
 

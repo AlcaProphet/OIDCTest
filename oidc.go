@@ -237,59 +237,6 @@ func DecodeJWT(token string) (header map[string]interface{}, payload map[string]
 	return header, payload, nil
 }
 
-// ClientCredentials 执行 Client Credentials 流程
-func ClientCredentials(tokenEndpoint, clientID, clientSecret, scope string, steps *[]DebugStep) (*TokenResponse, error) {
-	form := url.Values{}
-	form.Set("grant_type", "client_credentials")
-	form.Set("client_id", clientID)
-	form.Set("client_secret", clientSecret)
-	form.Set("scope", scope)
-
-	reqBody := form.Encode()
-	start := time.Now()
-	req, _ := http.NewRequest("POST", tokenEndpoint, strings.NewReader(reqBody))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	resp, err := httpClient.Do(req)
-	elapsed := time.Since(start)
-	if err != nil {
-		*steps = append(*steps, DebugStep{
-			Timestamp:  time.Now(),
-			Name:       "Client Credentials",
-			Method:     "POST",
-			URL:        tokenEndpoint,
-			ReqBody:    maskSecret(reqBody, clientSecret),
-			Error:      err.Error(),
-			DurationMs: elapsed.Milliseconds(),
-		})
-		return nil, fmt.Errorf("client credentials 请求失败: %w", err)
-	}
-	defer resp.Body.Close()
-
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-
-	*steps = append(*steps, DebugStep{
-		Timestamp:  time.Now(),
-		Name:       "Client Credentials",
-		Method:     "POST",
-		URL:        tokenEndpoint,
-		ReqBody:    maskSecret(reqBody, clientSecret),
-		StatusCode: resp.StatusCode,
-		RespBody:   truncateBody(body, 2000),
-		DurationMs: elapsed.Milliseconds(),
-	})
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("client credentials 返回状态码 %d: %s", resp.StatusCode, truncateBody(body, 500))
-	}
-
-	var tokenResp TokenResponse
-	if err := json.Unmarshal(body, &tokenResp); err != nil {
-		return nil, fmt.Errorf("解析 token 响应失败: %w", err)
-	}
-
-	return &tokenResp, nil
-}
-
 // decodeJWTBase64 解码 base64url 编码的 JWT 片段
 func decodeJWTBase64(s string) (map[string]interface{}, error) {
 	// 补齐 base64 填充
