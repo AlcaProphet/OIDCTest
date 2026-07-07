@@ -1,43 +1,79 @@
+# =============================================================================
+# Workflow: 构建并推送 Docker 镜像到 GitHub Container Registry (GHCR)
+# =============================================================================
+# 触发条件:
+#   1. push 到 main 或 beta 分支 → 构建分支浮动标签镜像 (日常开发)
+#   2. push v* 标签 (如 v3.3.3)     → 构建语义化版本镜像 (正式发布)
+#   3. GitHub Actions 页面手动触发   → 选择分支，手动构建
+#
+# 镜像标签策略:
+#   push main       → :main, :latest   (latest 始终指向最新稳定版)
+#   push beta       → :beta            (浮动标签，始终指向最新测试版)
+#   push v3.3.3     → :3.3.3, :3.3, :3 (SemVer 三标签，不可变)
+#
+# 使用方式:
+#   docker pull ghcr.io/alcaprophet/kyleworks-oidc-test:latest   # 最新稳定版
+#   docker pull ghcr.io/alcaprophet/kyleworks-oidc-test:beta      # 最新测试版
+#   docker pull ghcr.io/alcaprophet/kyleworks-oidc-test:3.3.3    # 指定版本
+# =============================================================================
+
 name: Build and Push Docker Image
 
 on:
   push:
-    branches: [main, beta]
+    branches: [main, beta]        # 分支 push 触发
     tags:
-      - 'v*'
-  workflow_dispatch:
+      - 'v*'                       # 版本标签 push 触发 (如 v3.3.3)
+  workflow_dispatch:               # 允许在 Actions 页面手动触发
+
+env:
+  REGISTRY: ghcr.io                                       # GitHub 容器注册表地址
+  IMAGE_NAME: ${{ github.repository_owner }}/kyleworks-oidc-test  # 镜像路径 (所有者/镜像名)
 
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
-      packages: write
+      contents: read              # 读取仓库代码
+      packages: write             # 推送镜像到 GHCR
 
     steps:
+      # ── 步骤 1: 检出代码 ──
       - uses: actions/checkout@v4
 
-      - name: Docker 元数据
+      # ── 步骤 2: 生成 Docker 镜像标签和注解 ──
+      # docker/metadata-action 根据触发条件自动生成标签列表和 OCI 注解
+      - name: 生成 Docker 元数据
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/alcaprophet/kyleworks-oidc-test
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
+            # 分支 push → 使用分支名作为浮动标签 (main 或 beta)
             type=ref,event=branch
-            type=ref,event=tag
+            # 版本标签 push → 生成 SemVer 标签组
+            # 例如 v3.3.3 → 3.3.3 (精确版本), 3.3 (次版本浮动), 3 (主版本浮动)
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            # main 分支额外打上 latest 标签 (社区惯例: latest = 最新稳定版)
             type=raw,value=latest,enable=${{ github.ref_type == 'branch' && github.ref_name == 'main' }}
 
+      # ── 步骤 3: 登录 GitHub Container Registry ──
+      # 使用自动注入的 GITHUB_TOKEN，无需手动配置 Secrets
       - name: 登录 GHCR
         uses: docker/login-action@v3
         with:
-          registry: ghcr.io
+          registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: 构建并推送镜像
+      # ── 步骤 4: 构建并推送多架构镜像 ──
+      # Dockerfile 使用多阶段构建，最终镜像约 15MB
+      - name: 构建并推送 Docker 镜像
         uses: docker/build-push-action@v6
         with:
-          context: .
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          context: .               # 构建上下文为仓库根目录
+          push: true               # 构建完成后推送到 GHCR
+          tags: ${{ steps.meta.outputs.tags }}      # 使用步骤 2 生成的标签列表
+          labels: ${{ steps.meta.outputs.labels }}  # 使用步骤 2 生成的 OCI 注解

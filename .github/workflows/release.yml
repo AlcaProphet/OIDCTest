@@ -1,75 +1,101 @@
+# =============================================================================
+# Workflow: 创建 GitHub Release 归档
+# =============================================================================
+# 触发条件:
+#   1. push v* 标签 (如 v3.3.3)     → 以该标签自动创建 Release
+#   2. GitHub Actions 页面手动触发   → 输入版本号，自动打标签并创建 Release
+#
+# ⚠️ 注意事项:
+#   - push 分支 (main/beta) 不会触发此 workflow
+#   - 分支构建只产生 Docker 镜像 (docker-publish.yml)，不创建 Release
+#   - 只有正式打版 (推送 v* 标签或手动触发) 才创建 Release
+#   - 标签格式必须为 v + 语义化版本号，如 v3.3.3
+#
+# 产物:
+#   - GitHub Release 页面 (含自动生成的 Release Notes)
+#   - KyleworksOidcTest.tar.gz 源码归档包
+# =============================================================================
+
 name: Create Release Archive
 
 on:
   push:
-    branches: [main, beta]
     tags:
-      - 'v*'
-  workflow_dispatch:
+      - 'v*'                       # 仅版本标签 push 触发 (不再响应分支 push)
+  workflow_dispatch:               # 允许在 Actions 页面手动触发
     inputs:
       version:
-        description: '版本号（留空则自动计算下一个版本）'
-        required: false
+        description: '版本号 — 输入纯数字 (如 3.3.3)，workflow 自动添加 v 前缀'
+        required: true             # 手动触发时版本号为必填
         default: ''
 
 jobs:
   release:
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: write               # 需要写权限: 推送标签 + 创建 Release
 
     steps:
+      # ── 步骤 1: 检出完整代码仓库 (含所有历史标签) ──
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
-          fetch-tags: true
+          fetch-depth: 0            # 获取完整提交历史
+          fetch-tags: true          # 获取所有 Git 标签
 
+      # ── 步骤 2: 确定版本号 ──
+      # 标签触发 → 直接使用推送的标签名 (如 v3.3.3)
+      # 手动触发 → 使用用户输入的版本号，自动添加 v 前缀
       - name: 确定版本号
         id: version
         run: |
-          if [ -n "${{ github.event.inputs.version }}" ]; then
-            # 手动触发时使用输入的版本号
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            # 手动触发: 用户输入纯数字版本号 (如 3.3.3)，自动加 v 前缀
             TAG="v${{ github.event.inputs.version }}"
-          elif [ "${{ github.ref_type }}" = "tag" ]; then
-            # 标签触发时使用当前标签
-            TAG="${{ github.ref_name }}"
+            echo "📋 手动触发，目标版本: $TAG"
           else
-            # 自动计算下一个版本号
-            LATEST=$(git tag --sort=-v:refname | grep '^v[0-9]' | head -1 | sed 's/^v//')
-            if [ -z "$LATEST" ]; then
-              NEXT="1.0"
-            else
-              MAJOR=$(echo "$LATEST" | cut -d. -f1)
-              MINOR=$(echo "$LATEST" | cut -d. -f2)
-              NEXT="$MAJOR.$((MINOR + 1))"
-            fi
-            TAG="v$NEXT"
+            # 标签触发: 直接使用推送的标签名
+            TAG="${{ github.ref_name }}"
+            echo "🏷️  标签触发，版本号: $TAG"
           fi
+          # 将版本号写入输出变量，供后续步骤使用
           echo "tag=$TAG" >> $GITHUB_OUTPUT
-          echo "版本号: $TAG"
 
-      - name: 创建并推送标签（仅手动触发时）
+      # ── 步骤 3: 创建并推送 Git 标签 (仅手动触发时需要) ──
+      # 标签触发时，标签已经由 git push 推送到仓库，无需再创建
+      # 手动触发时，workflow 自动创建注释标签并推送到远程
+      - name: 创建并推送版本标签
         if: github.event_name == 'workflow_dispatch'
         run: |
           git config user.name "github-actions"
           git config user.email "actions@github.com"
-          git tag ${{ steps.version.outputs.tag }}
+          # 创建注释标签 (-a: annotated tag, -m: 标签说明)
+          git tag -a ${{ steps.version.outputs.tag }} -m "Release ${{ steps.version.outputs.tag }}"
           git push origin ${{ steps.version.outputs.tag }}
+          echo "✅ 已创建并推送标签: ${{ steps.version.outputs.tag }}"
 
-      - name: 打包部署文件
+      # ── 步骤 4: 打包项目源码 ──
+      # 将部署所需文件打包为 tar.gz，用户可直接下载部署
+      - name: 打包项目源码
         run: |
           mkdir -p release/KyleworksOidcTest
+          # 复制构建和部署文件
           cp Dockerfile docker-compose.yml go.mod go.sum .gitignore release/KyleworksOidcTest/
+          # 复制源代码文件
           cp main.go oidc.go store.go release/KyleworksOidcTest/
+          # 复制模板目录
           cp -r templates release/KyleworksOidcTest/
+          # 打包为 tar.gz
           cd release
           tar -czf KyleworksOidcTest.tar.gz KyleworksOidcTest/
+          echo "📦 源码包已生成: KyleworksOidcTest.tar.gz"
 
-      - name: 创建 Release 并上传
+      # ── 步骤 5: 创建 GitHub Release 并上传归档文件 ──
+      # softprops/action-gh-release 会根据 commit 历史自动生成 Release Notes
+      - name: 创建 Release 并上传源码包
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.version.outputs.tag }}
-          files: release/KyleworksOidcTest.tar.gz
-          generate_release_notes: true
+          tag_name: ${{ steps.version.outputs.tag }}    # Release 对应的 Git 标签
+          files: release/KyleworksOidcTest.tar.gz        # 上传的归档文件
+          generate_release_notes: true                   # 自动生成 Release Notes
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
