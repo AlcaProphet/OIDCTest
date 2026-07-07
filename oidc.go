@@ -38,7 +38,17 @@ func Discover(issuer string, steps *[]DebugStep) (*OIDCEndpoints, error) {
 	discoveryURL := strings.TrimRight(issuer, "/") + "/.well-known/openid-configuration"
 
 	start := time.Now()
-	req, _ := http.NewRequest("GET", discoveryURL, nil)
+	req, err := http.NewRequest("GET", discoveryURL, nil)
+	if err != nil {
+		*steps = append(*steps, DebugStep{
+			Timestamp: time.Now(),
+			Name:      "OIDC Discovery",
+			Method:    "GET",
+			URL:       discoveryURL,
+			Error:     err.Error(),
+		})
+		return nil, fmt.Errorf("构造 discovery 请求失败: %w", err)
+	}
 	resp, err := httpClient.Do(req)
 	elapsed := time.Since(start)
 	if err != nil {
@@ -126,7 +136,18 @@ func ExchangeCode(tokenEndpoint, clientID, clientSecret, redirectURI, code, code
 
 	reqBody := form.Encode()
 	start := time.Now()
-	req, _ := http.NewRequest("POST", tokenEndpoint, strings.NewReader(reqBody))
+	req, err := http.NewRequest("POST", tokenEndpoint, strings.NewReader(reqBody))
+	if err != nil {
+		*steps = append(*steps, DebugStep{
+			Timestamp: time.Now(),
+			Name:      "Token 交换",
+			Method:    "POST",
+			URL:       tokenEndpoint,
+			ReqBody:   maskSecret(reqBody, clientSecret),
+			Error:     err.Error(),
+		})
+		return nil, fmt.Errorf("构造 token 交换请求失败: %w", err)
+	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	resp, err := httpClient.Do(req)
 	elapsed := time.Since(start)
