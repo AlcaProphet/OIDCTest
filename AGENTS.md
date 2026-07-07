@@ -483,3 +483,11 @@ CREATE TABLE IF NOT EXISTS sessions (
 
 `GetSession` 从 SQLite 读取 `result` 字段后反序列化时，若 JSON 解析失败仅 `log.Printf` 记录日志，`TokenResult` 保持 `nil`。SQLite 中 JSON 数据损坏概率极低（仅可能在数据库文件被手动篡改时发生），且 `log.Printf` 已写入容器日志供管理员排查。对终端用户而言，看到"暂无结果"与看到"数据损坏"体验差别不大。保留当前处理方式。
 
+### 12. SQLite sessions 表无过期清理机制
+
+Session 记录（`sessions` 表）永不过期、无自动清理。Cookie `MaxAge` 为 24 小时后浏览器自动清除，但数据库中对应行保留。仅 `/logout` 手动触发 `DeleteSession` 删除。对于 1-5 人内部测试场景，年增约 9,000 行（~20-45 MB），SQLite 在百万行以内性能无感知影响。保留当前行为，不添加定时清理或 TTL 逻辑（避免引入 `time.Ticker` / goroutine 等复杂度）。
+
+### 13. Discover 在 handleLogin 和 handleCallback 中各调用一次
+
+`handleLogin` 调用 `Discover` 获取端点构造授权 URL，但端点信息不存入 `Session`（结构体无端点字段）。`handleCallback` 再次调用 `Discover` 获取 token/userinfo 端点。两次调用目的不同：handleLogin 做"快速失败"校验（Issuer URL 错误在跳转前报错），handleCallback 获取实际交互所需端点。`.well-known/openid-configuration` 响应 < 2KB，延迟 < 50ms，网络开销可忽略。若将端点缓存到 Session 需新增字段，增加结构复杂度，得不偿失。保留当前设计。
+
