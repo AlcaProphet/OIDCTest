@@ -165,6 +165,17 @@ func detectBaseURL(r *http.Request) string {
 	return proto + "://" + host
 }
 
+// normalizeIssuer 标准化 Issuer URL，自动剥离 .well-known/openid-configuration 后缀（大小写不敏感）
+func normalizeIssuer(issuer string) string {
+	issuer = strings.TrimRight(issuer, "/")
+	// 大小写不敏感地剥离 /.well-known/openid-configuration 后缀
+	suffix := "/.well-known/openid-configuration"
+	if len(issuer) > len(suffix) && strings.EqualFold(issuer[len(issuer)-len(suffix):], suffix) {
+		issuer = issuer[:len(issuer)-len(suffix)]
+	}
+	return issuer
+}
+
 // getEffectiveBaseURL 获取实际使用的 Base URL（手动覆盖优先）
 func getEffectiveBaseURL(r *http.Request, config *OIDCConfig) string {
 	if config != nil && config.BaseURL != "" {
@@ -249,7 +260,7 @@ func (app *App) handleConfig(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 必填非空检查
-	issuer := strings.TrimSpace(r.FormValue("issuer"))
+	issuer := normalizeIssuer(strings.TrimSpace(r.FormValue("issuer")))
 	clientID := strings.TrimSpace(r.FormValue("client_id"))
 	clientSecret := strings.TrimSpace(r.FormValue("client_secret"))
 
@@ -406,7 +417,15 @@ func (app *App) handleCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if code == "" {
-		app.renderError(w, "未收到授权码 (code)")
+		sess.DebugSteps = append(sess.DebugSteps, DebugStep{
+			Timestamp: time.Now(),
+			Name:      "回调错误",
+			Method:    "GET",
+			URL:       r.URL.String(),
+			Error:     "未收到授权码 (code)",
+		})
+		UpdateSessionResult(app.db, sid, TokenResult{}, sess.DebugSteps)
+		http.Redirect(w, r, "/result", http.StatusSeeOther)
 		return
 	}
 
@@ -462,15 +481,25 @@ func (app *App) handleCallback(w http.ResponseWriter, r *http.Request) {
 	// 解码 ID Token
 	var idTokenHeader, idTokenClaims map[string]interface{}
 	if tokenResp.IDToken != "" {
-		idTokenHeader, idTokenClaims, _ = DecodeJWT(tokenResp.IDToken)
-		sess.DebugSteps = append(sess.DebugSteps, DebugStep{
-			Timestamp: time.Now(),
-			Name:      "ID Token 解码",
-			Method:    "-",
-			URL:       "-",
-			StatusCode: 200,
-			RespBody:   "成功解码 ID Token (Header + Payload)",
-		})
+		idTokenHeader, idTokenClaims, err = DecodeJWT(tokenResp.IDToken)
+		if err != nil {
+			sess.DebugSteps = append(sess.DebugSteps, DebugStep{
+				Timestamp: time.Now(),
+				Name:      "ID Token 解码",
+				Method:    "-",
+				URL:       "-",
+				Error:     "解码 ID Token 失败: " + err.Error(),
+			})
+		} else {
+			sess.DebugSteps = append(sess.DebugSteps, DebugStep{
+				Timestamp: time.Now(),
+				Name:      "ID Token 解码",
+				Method:    "-",
+				URL:       "-",
+				StatusCode: 200,
+				RespBody:   "成功解码 ID Token (Header + Payload)",
+			})
+		}
 	}
 
 	// 尝试解码 Access Token (如果是 JWT)
@@ -570,10 +599,15 @@ func (app *App) handleLogout(w http.ResponseWriter, r *http.Request) {
 	// 构造 Keycloak 退出 URL
 	if endSessionEndpoint != "" {
 		baseURL := getEffectiveBaseURL(r, &logoutConfig)
-		logoutURL := endSessionEndpoint + "?post_logout_redirect_uri=" + url.QueryEscape(baseURL)
+		params := url.Values{}
+		params.Set("post_logout_redirect_uri", baseURL+"/")
 		if idToken != "" {
-			logoutURL += "&id_token_hint=" + url.QueryEscape(idToken)
+			params.Set("id_token_hint", idToken)
 		}
+		if logoutConfig.ClientID != "" {
+			params.Set("client_id", logoutConfig.ClientID)
+		}
+		logoutURL := endSessionEndpoint + "?" + params.Encode()
 		http.Redirect(w, r, logoutURL, http.StatusSeeOther)
 		return
 	}
@@ -581,87 +615,9 @@ func (app *App) handleLogout(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
-// handleClientCredentials Client Credentials 流程
-func (app *App) handleClientCredentials(w http.ResponseWriter, r *http.Request) {
-	config, err := GetConfig(app.db)
-	if err != nil || config == nil {
-		app.renderError(w, "请先完成 OIDC 配置")
-		return
-	}
-
-	// Discovery
-	var steps []DebugStep
-	endpoints, err := Discover(config.Issuer, &steps)
-	if err != nil {
-		app.renderError(w, "OIDC Discovery 失败: "+err.Error())
-		return
-	}
-
-	// 执行 Client Credentials
-	tokenResp, err := ClientCredentials(
-		endpoints.TokenEndpoint,
-		config.ClientID,
-		config.ClientSecret,
-		config.Scopes,
-		&steps,
-	)
-	if err != nil {
-		app.renderError(w, "Client Credentials 流程失败: "+err.Error())
-		return
-	}
-
-	// 尝试解码 Access Token (如果是 JWT)
-	var accessTokenJWT map[string]interface{}
-	if strings.Count(tokenResp.AccessToken, ".") >= 2 {
-		_, accessTokenJWT, _ = DecodeJWT(tokenResp.AccessToken)
-	}
-
-	// 尝试获取 UserInfo
-	var userInfo map[string]interface{}
-	if endpoints.UserinfoEndpoint != "" {
-		userInfo, _ = GetUserInfo(endpoints.UserinfoEndpoint, tokenResp.AccessToken, &steps)
-	}
-
-	// 创建会话存储结果
-	sessionID, err := GenerateRandomString(32)
-	if err != nil {
-		app.renderError(w, "生成 session ID 失败: "+err.Error())
-		return
-	}
-
-	result := TokenResult{
-		AccessToken:    tokenResp.AccessToken,
-		TokenType:      tokenResp.TokenType,
-		ExpiresIn:      tokenResp.ExpiresIn,
-		RefreshToken:   tokenResp.RefreshToken,
-		IDToken:        tokenResp.IDToken,
-		AccessTokenJWT: accessTokenJWT,
-		UserInfo:       userInfo,
-	}
-
-	sess := &Session{
-		ID:           sessionID,
-		Flow:         "client-credentials",
-		OIDCConfig:   *config,
-		DebugSteps:   steps,
-		TokenResult:  &result,
-		CreatedAt:    time.Now(),
-	}
-
-	if err := CreateSession(app.db, sess); err != nil {
-		app.renderError(w, "创建会话失败: "+err.Error())
-		return
-	}
-
-	// 设置 Cookie
-	setSessionCookie(w, sessionID)
-
-	http.Redirect(w, r, "/result", http.StatusSeeOther)
-}
-
 // handleDiscover 自动检测 OIDC 端点信息（供配置页 AJAX 调用）
 func (app *App) handleDiscover(w http.ResponseWriter, r *http.Request) {
-	issuer := strings.TrimSpace(r.URL.Query().Get("issuer"))
+	issuer := normalizeIssuer(strings.TrimSpace(r.URL.Query().Get("issuer")))
 	if issuer == "" {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(`{"error":"缺少 issuer 参数"}`))
@@ -704,7 +660,7 @@ func (app *App) renderError(w http.ResponseWriter, msg string) {
 	w.WriteHeader(http.StatusInternalServerError)
 	fmt.Fprintf(w, `<!DOCTYPE html>
 <html lang="zh-CN">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>错误 — KeyCloak OIDC 模拟测试</title>
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>错误 — Keycloak OIDC 模拟测试</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#f5f5f5;color:#333;min-height:100vh}.container{max-width:640px;margin:0 auto;padding:2rem 1rem}h1{font-size:1.5rem;margin-bottom:1rem}.card{background:#fff;border-radius:8px;padding:1.5rem;box-shadow:0 1px 3px rgba(0,0,0,0.1);border-left:3px solid #e04040}.btn{display:inline-block;padding:0.5rem 1.2rem;border:none;border-radius:4px;font-size:0.85rem;cursor:pointer;text-decoration:none;background:#4a90d9;color:#fff;margin-top:1rem}.btn:hover{background:#3a7bc8}
 </style>
@@ -750,7 +706,6 @@ func main() {
 	http.HandleFunc("/callback", app.handleCallback)
 	http.HandleFunc("/result", app.handleResult)
 	http.HandleFunc("/logout", app.handleLogout)
-	http.HandleFunc("/client-credentials", app.handleClientCredentials)
 	http.HandleFunc("/discover", app.handleDiscover)
 
 	// HTTP 服务器

@@ -2,15 +2,17 @@
 
 [![Build and Push Docker Image](https://github.com/AlcaProphet/OIDCTest/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/AlcaProphet/OIDCTest/actions/workflows/docker-publish.yml)
 
+English | [中文](README.md)
+
 A lightweight OIDC debugging tool for testing self-hosted Keycloak SSO login flows. Inspired by Auth0 OIDC Playground — **zero config files**, everything via web UI.
 
 ## Features
 
-- **Zero Config** — All settings via web form; no `.env` or config files needed
-- **Auto Discovery** — One-click OIDC endpoint detection from Issuer URL
+- **Zero Config** — No `.env` or config files; all settings via web form
+- **Auto Discovery** — One-click OIDC endpoint detection; accepts full `.well-known/openid-configuration` URLs
 - **Keycloak Helper** — Auto-generates Root URL, Redirect URI, Web Origins — click to copy
 - **Step Debugging** — Every HTTP request logged with method, URL, status code, and duration
-- **Three Flows** — Authorization Code + PKCE / Authorization Code (no PKCE) / Client Credentials
+- **Two Login Flows** — Authorization Code + PKCE / Authorization Code (no PKCE)
 - **Token Viewer** — Decodes JWT Header and Payload; structured UserInfo display
 - **Persistent** — SQLite storage; configuration survives container restarts
 - **Lightweight** — Single Go binary; Docker image ~15MB
@@ -20,13 +22,13 @@ A lightweight OIDC debugging tool for testing self-hosted Keycloak SSO login flo
 ### Prerequisites
 
 - Docker and Docker Compose
-- A configured Keycloak instance (or any OIDC-compatible provider)
+- An accessible Keycloak instance (or any OIDC-compatible provider)
 - (Optional) External NGINX for HTTPS reverse proxy
 
 ### Option 1: Build from Source
 
 ```bash
-git clone <your-repo-url> KyleworksOidcTest
+git clone https://github.com/AlcaProphet/OIDCTest.git KyleworksOidcTest
 cd KyleworksOidcTest
 docker compose up -d --build
 ```
@@ -35,11 +37,13 @@ docker compose up -d --build
 
 ```bash
 mkdir KyleworksOidcTest && cd KyleworksOidcTest
-# Download docker-compose.yml, then:
+# Download docker-compose.yml from the repo, then:
 docker compose pull && docker compose up -d
 ```
 
-Visit `http://<server-ip>:61000` to see the configuration page.
+> Image hosted on GitHub Container Registry: `ghcr.io/alcaprophet/kyleworks-oidc-test`
+
+Visit `http://<server-ip>:61000` to access the configuration page.
 
 ### Keycloak Client Setup
 
@@ -61,16 +65,13 @@ On first visit, fill in the form:
 
 - **Issuer URL** — Click "Detect Endpoints" to auto-discover OIDC endpoints
 - **Client ID / Client Secret** — Keycloak client credentials
-- **Scopes** — Default: `openid profile email`
+- **Scopes** — Default: `openid profile email`; checkbox quick-select + custom input
 - **Flow** — Recommended: Authorization Code + PKCE
 - **Base URL** — Auto-detected; can be overridden manually
 
 ### 2. Test
 
-Once configured, click:
-
-- **「Start Login」** — Initiates Authorization Code flow, redirects to Keycloak, displays full token info on return
-- **「Client Credentials」** — Directly obtains an Access Token (M2M scenario)
+Once configured, click **「Start Login」** to initiate the Authorization Code flow — redirect to Keycloak, then view full token info on return.
 
 ### 3. View Results
 
@@ -88,20 +89,18 @@ The results page displays:
 |------|-------------|------|
 | Authorization Code + PKCE | Auth code flow with PKCE (recommended) | ✅ |
 | Authorization Code (no PKCE) | Auth code flow for comparison testing | ❌ |
-| Client Credentials | Machine-to-machine, direct token acquisition | — |
 
 ## Routes
 
 | Route | Method | Purpose |
 |------|--------|---------|
-| `/` | GET | Home: config form or action buttons |
+| `/` | GET | Home: config form or action buttons (login + edit config) |
 | `/config` | POST | Save OIDC configuration |
 | `/discover` | GET | Auto-detect OIDC endpoints (`?issuer=...`) |
 | `/login` | GET | Initiate OIDC login → 302 Keycloak |
 | `/callback` | GET | OIDC callback handler |
 | `/result` | GET | Token viewer + debug timeline |
 | `/logout` | GET | Logout (with Keycloak single sign-out) |
-| `/client-credentials` | GET | Client Credentials flow |
 
 ## External NGINX Reverse Proxy
 
@@ -144,7 +143,7 @@ KyleworksOidcTest/
 │   └── result.html      # Token viewer + debug timeline
 ├── Dockerfile           # Multi-stage build
 ├── docker-compose.yml   # Docker Compose deployment
-├── .github/workflows/   # GitHub Actions: auto-build and push image to GHCR
+├── .github/workflows/   # GitHub Actions: auto-build image (docker-publish) + create release archive (release)
 └── nginx-example.conf   # NGINX reverse proxy reference
 ```
 
@@ -154,4 +153,4 @@ KyleworksOidcTest/
 - Cookies use `HttpOnly` without `Secure` flag (supports HTTP testing)
 - No CSRF / Rate Limiting / Security Headers (not production-grade)
 - JWT is base64-decoded for display only — **signature is not verified**
-- No concurrency locks / request retries / graceful shutdown
+- No concurrency locks / request retries

@@ -2,17 +2,19 @@
 
 [![Build and Push Docker Image](https://github.com/AlcaProphet/OIDCTest/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/AlcaProphet/OIDCTest/actions/workflows/docker-publish.yml)
 
-轻量级 OIDC 调试工具，用于测试自搭建 Keycloak SSO 的 OIDC 登录流程。类似 Auth0 OIDC Playground，**零配置文件**，全部通过 Web 表单操作。
+[English](README-EN.md) | 中文
+
+轻量级 OIDC 调试工具，用于测试自搭建 Keycloak SSO 的 OIDC 登录流程。设计灵感来自 Auth0 OIDC Playground，**零配置文件**，全部操作通过 Web 界面完成。
 
 ## 特性
 
-- **零配置** — 全部设置通过 Web 表单完成，无需 `.env` 或配置文件
-- **自动发现** — 输入 Issuer URL 一键检测 OIDC 端点（Authorization / Token / UserInfo / End Session）
-- **Keycloak 助手** — 自动生成 Keycloak 客户端所需的 Root URL、Redirect URI、Web Origins 等配置值，点击即复制
-- **步骤可视化** — 每次 HTTP 请求均记录方法、URL、状态码、耗时，按时间线展示
-- **三种流程** — Authorization Code + PKCE / Authorization Code（无 PKCE）/ Client Credentials
+- **零配置** — 无需 `.env` 或配置文件，一切通过 Web 表单设置
+- **自动发现** — 输入 Issuer URL，一键检测 OIDC 端点；支持直接粘贴 `.well-known/openid-configuration` 完整地址
+- **Keycloak 助手** — 自动生成 Root URL、Redirect URI、Web Origins 等客户端配置，点击即复制
+- **步骤可视化** — 每次 HTTP 请求均记录方法、URL、状态码和耗时，按时间线展示
+- **两种登录流程** — Authorization Code + PKCE / Authorization Code（无 PKCE）
 - **Token 查看器** — 自动解码 JWT Header 和 Payload，结构化展示 UserInfo
-- **持久化** — SQLite 存储，容器重启配置不丢失
+- **配置持久化** — SQLite 存储，容器重启配置不丢失
 - **轻量部署** — Go 编译为单一二进制，Docker 镜像约 15MB
 
 ## 快速开始
@@ -20,26 +22,28 @@
 ### 前提条件
 
 - Docker 和 Docker Compose
-- 一个已配置好的 Keycloak 实例（或其他兼容 OIDC 的 Provider）
+- 一个可访问的 Keycloak 实例（或其他兼容 OIDC 的 Provider）
 - （可选）外部 NGINX 用于 HTTPS 反代
 
 ### 方式一：源码构建
 
 ```bash
-git clone <your-repo-url> KyleworksOidcTest
+git clone https://github.com/AlcaProphet/OIDCTest.git KyleworksOidcTest
 cd KyleworksOidcTest
 docker compose up -d --build
 ```
 
-### 方式二：直接拉取镜像（推荐）
+### 方式二：拉取预构建镜像（推荐）
 
 ```bash
 mkdir KyleworksOidcTest && cd KyleworksOidcTest
-# 下载 docker-compose.yml 后
+# 从仓库下载 docker-compose.yml 后执行：
 docker compose pull && docker compose up -d
 ```
 
-访问 `http://<服务器IP>:61000` 即可看到配置页面。
+> 镜像托管于 GitHub Container Registry：`ghcr.io/alcaprophet/kyleworks-oidc-test`
+
+访问 `http://<服务器IP>:61000` 即可进入配置页面。
 
 ### Keycloak 客户端配置
 
@@ -61,16 +65,13 @@ docker compose pull && docker compose up -d
 
 - **Issuer URL** — 输入后点击「检测端点」自动获取 OIDC 端点信息
 - **Client ID / Client Secret** — Keycloak 客户端凭据
-- **Scopes** — 默认 `openid profile email`
+- **Scopes** — 默认 `openid profile email`，支持复选框快速选择 + 自定义输入
 - **流程** — 推荐 Authorization Code + PKCE
 - **Base URL** — 自动检测，可手动覆盖
 
 ### 2. 测试登录
 
-保存配置后，点击：
-
-- **「开始登录」** — 发起 Authorization Code 流程，跳转 Keycloak 登录后回调展示完整 Token 信息
-- **「Client Credentials」** — 直接获取 Access Token（M2M 场景）
+保存配置后，点击 **「开始登录」** 发起 Authorization Code 流程，跳转 Keycloak 登录后回调展示完整 Token 信息。
 
 ### 3. 查看结果
 
@@ -88,20 +89,18 @@ docker compose pull && docker compose up -d
 |------|------|------|
 | Authorization Code + PKCE | 授权码流程 + PKCE（推荐） | ✅ |
 | Authorization Code（无 PKCE） | 授权码流程，用于对比测试 | ❌ |
-| Client Credentials | 机器对机器，直接获取 Access Token | — |
 
 ## 路由
 
 | 路由 | 方法 | 功能 |
 |------|------|------|
-| `/` | GET | 首页：未配置→配置表单；已配置→操作按钮 |
+| `/` | GET | 首页：未配置→配置表单；已配置→操作按钮（登录 + 修改配置） |
 | `/config` | POST | 保存 OIDC 配置 |
 | `/discover` | GET | 自动检测 OIDC 端点（`?issuer=...`） |
 | `/login` | GET | 发起 OIDC 登录 → 302 Keycloak |
 | `/callback` | GET | OIDC 回调处理 |
 | `/result` | GET | Token 查看器 + 调试时间线 |
 | `/logout` | GET | 退出登录（含 Keycloak 单点登出） |
-| `/client-credentials` | GET | Client Credentials 流程 |
 
 ## 外部 NGINX 反代
 
@@ -144,7 +143,7 @@ KyleworksOidcTest/
 │   └── result.html      # Token 查看器 + 调试时间线
 ├── Dockerfile           # 多阶段构建
 ├── docker-compose.yml   # Docker Compose 部署
-├── .github/workflows/   # GitHub Actions 自动构建并推送镜像到 GHCR
+├── .github/workflows/   # GitHub Actions 自动构建镜像（docker-publish）+ 创建 Release 归档（release）
 └── nginx-example.conf   # NGINX 反代参考配置
 ```
 
@@ -154,4 +153,4 @@ KyleworksOidcTest/
 - Cookie 使用 `HttpOnly`，未设置 `Secure` 标记（支持 HTTP 环境测试）
 - 不做 CSRF / Rate Limiting / Security Headers 等生产级安全防护
 - JWT 仅做 base64 解码展示 Claims，**不验证签名**
-- 不做并发锁 / 请求重试 / 优雅关闭
+- 不做并发锁 / 请求重试

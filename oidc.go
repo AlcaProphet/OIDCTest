@@ -30,12 +30,26 @@ type TokenResponse struct {
 	IDToken      string `json:"id_token"`
 }
 
+// httpClient 共享 HTTP 客户端，15 秒超时避免 Keycloak 不可达时请求挂起过久
+var httpClient = &http.Client{Timeout: 15 * time.Second}
+
 // Discover 调用 issuer/.well-known/openid-configuration 获取端点
 func Discover(issuer string, steps *[]DebugStep) (*OIDCEndpoints, error) {
 	discoveryURL := strings.TrimRight(issuer, "/") + "/.well-known/openid-configuration"
 
 	start := time.Now()
-	resp, err := http.Get(discoveryURL)
+	req, err := http.NewRequest("GET", discoveryURL, nil)
+	if err != nil {
+		*steps = append(*steps, DebugStep{
+			Timestamp: time.Now(),
+			Name:      "OIDC Discovery",
+			Method:    "GET",
+			URL:       discoveryURL,
+			Error:     err.Error(),
+		})
+		return nil, fmt.Errorf("构造 discovery 请求失败: %w", err)
+	}
+	resp, err := httpClient.Do(req)
 	elapsed := time.Since(start)
 	if err != nil {
 		*steps = append(*steps, DebugStep{
@@ -120,8 +134,22 @@ func ExchangeCode(tokenEndpoint, clientID, clientSecret, redirectURI, code, code
 		form.Set("code_verifier", codeVerifier)
 	}
 
+	reqBody := form.Encode()
 	start := time.Now()
-	resp, err := http.PostForm(tokenEndpoint, form)
+	req, err := http.NewRequest("POST", tokenEndpoint, strings.NewReader(reqBody))
+	if err != nil {
+		*steps = append(*steps, DebugStep{
+			Timestamp: time.Now(),
+			Name:      "Token 交换",
+			Method:    "POST",
+			URL:       tokenEndpoint,
+			ReqBody:   maskSecret(reqBody, clientSecret),
+			Error:     err.Error(),
+		})
+		return nil, fmt.Errorf("构造 token 交换请求失败: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	resp, err := httpClient.Do(req)
 	elapsed := time.Since(start)
 	if err != nil {
 		*steps = append(*steps, DebugStep{
@@ -129,7 +157,7 @@ func ExchangeCode(tokenEndpoint, clientID, clientSecret, redirectURI, code, code
 			Name:       "Token 交换",
 			Method:     "POST",
 			URL:        tokenEndpoint,
-			ReqBody:    maskSecret(form.Encode(), clientSecret),
+			ReqBody:    maskSecret(reqBody, clientSecret),
 			Error:      err.Error(),
 			DurationMs: elapsed.Milliseconds(),
 		})
@@ -144,7 +172,7 @@ func ExchangeCode(tokenEndpoint, clientID, clientSecret, redirectURI, code, code
 		Name:       "Token 交换",
 		Method:     "POST",
 		URL:        tokenEndpoint,
-		ReqBody:    maskSecret(form.Encode(), clientSecret),
+		ReqBody:    maskSecret(reqBody, clientSecret),
 		StatusCode: resp.StatusCode,
 		RespBody:   truncateBody(body, 2000),
 		DurationMs: elapsed.Milliseconds(),
@@ -171,7 +199,7 @@ func GetUserInfo(userinfoEndpoint, accessToken string, steps *[]DebugStep) (map[
 	req.Header.Set("Authorization", "Bearer "+accessToken)
 
 	start := time.Now()
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := httpClient.Do(req)
 	elapsed := time.Since(start)
 	if err != nil {
 		*steps = append(*steps, DebugStep{
@@ -228,56 +256,6 @@ func DecodeJWT(token string) (header map[string]interface{}, payload map[string]
 	}
 
 	return header, payload, nil
-}
-
-// ClientCredentials 执行 Client Credentials 流程
-func ClientCredentials(tokenEndpoint, clientID, clientSecret, scope string, steps *[]DebugStep) (*TokenResponse, error) {
-	form := url.Values{}
-	form.Set("grant_type", "client_credentials")
-	form.Set("client_id", clientID)
-	form.Set("client_secret", clientSecret)
-	form.Set("scope", scope)
-
-	start := time.Now()
-	resp, err := http.PostForm(tokenEndpoint, form)
-	elapsed := time.Since(start)
-	if err != nil {
-		*steps = append(*steps, DebugStep{
-			Timestamp:  time.Now(),
-			Name:       "Client Credentials",
-			Method:     "POST",
-			URL:        tokenEndpoint,
-			ReqBody:    maskSecret(form.Encode(), clientSecret),
-			Error:      err.Error(),
-			DurationMs: elapsed.Milliseconds(),
-		})
-		return nil, fmt.Errorf("client credentials 请求失败: %w", err)
-	}
-	defer resp.Body.Close()
-
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-
-	*steps = append(*steps, DebugStep{
-		Timestamp:  time.Now(),
-		Name:       "Client Credentials",
-		Method:     "POST",
-		URL:        tokenEndpoint,
-		ReqBody:    maskSecret(form.Encode(), clientSecret),
-		StatusCode: resp.StatusCode,
-		RespBody:   truncateBody(body, 2000),
-		DurationMs: elapsed.Milliseconds(),
-	})
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("client credentials 返回状态码 %d: %s", resp.StatusCode, truncateBody(body, 500))
-	}
-
-	var tokenResp TokenResponse
-	if err := json.Unmarshal(body, &tokenResp); err != nil {
-		return nil, fmt.Errorf("解析 token 响应失败: %w", err)
-	}
-
-	return &tokenResp, nil
 }
 
 // decodeJWTBase64 解码 base64url 编码的 JWT 片段
