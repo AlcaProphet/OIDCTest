@@ -20,13 +20,14 @@ name: Create Release Archive
 
 on:
   push:
+    branches: [main, master]
     tags:
       - 'v*'                       # 仅版本标签 push 触发 (不再响应分支 push)
   workflow_dispatch:               # 允许在 Actions 页面手动触发
     inputs:
       version:
-        description: '版本号 — 输入纯数字 (如 3.3.3)，workflow 自动添加 v 前缀'
-        required: true             # 手动触发时版本号为必填
+        description: '版本号（留空则自动计算）'
+        required: false
         default: ''
 
 jobs:
@@ -48,23 +49,30 @@ jobs:
       - name: 确定版本号
         id: version
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            # 手动触发: 用户输入纯数字版本号 (如 3.3.3)，自动加 v 前缀
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            # 手动触发且填写了版本号
             TAG="v${{ github.event.inputs.version }}"
-            echo "📋 手动触发，目标版本: $TAG"
-          else
-            # 标签触发: 直接使用推送的标签名
+          elif [ "${{ github.ref_type }}" = "tag" ]; then
+            # 推送标签触发：直接使用该标签
             TAG="${{ github.ref_name }}"
-            echo "🏷️  标签触发，版本号: $TAG"
+          else
+            # 推送 main 或手动触发未填版本号：自动 patch +1
+            LATEST=$(git tag --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -1 | sed 's/^v//')
+            if [ -z "$LATEST" ]; then
+              NEXT="2.0.0"
+            else
+              MAJOR=$(echo "$LATEST" | cut -d. -f1)
+              MINOR=$(echo "$LATEST" | cut -d. -f2)
+              PATCH=$(echo "$LATEST" | cut -d. -f3)
+              NEXT="$MAJOR.$MINOR.$((PATCH + 1))"
+            fi
+            TAG="v$NEXT"
           fi
           # 将版本号写入输出变量，供后续步骤使用
           echo "tag=$TAG" >> $GITHUB_OUTPUT
 
-      # ── 步骤 3: 创建并推送 Git 标签 (仅手动触发时需要) ──
-      # 标签触发时，标签已经由 git push 推送到仓库，无需再创建
-      # 手动触发时，workflow 自动创建注释标签并推送到远程
-      - name: 创建并推送版本标签
-        if: github.event_name == 'workflow_dispatch'
+      - name: 创建并推送标签
+        if: github.ref_type != 'tag'
         run: |
           git config user.name "github-actions"
           git config user.email "actions@github.com"
