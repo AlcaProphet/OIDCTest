@@ -600,7 +600,7 @@ func (app *App) handleLogout(w http.ResponseWriter, r *http.Request) {
 	if endSessionEndpoint != "" {
 		baseURL := getEffectiveBaseURL(r, &logoutConfig)
 		params := url.Values{}
-		params.Set("post_logout_redirect_uri", baseURL)
+		params.Set("post_logout_redirect_uri", baseURL+"/")
 		if idToken != "" {
 			params.Set("id_token_hint", idToken)
 		}
