@@ -23,8 +23,8 @@
         .step-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.3rem; }
         .step-name { font-weight: 600; font-size: 0.85rem; }
         .step-time { font-size: 0.75rem; color: #888; }
-        .step-detail { font-size: 0.75rem; color: #666; }
-        .step-detail code { background: #eee; padding: 0.1rem 0.3rem; border-radius: 2px; font-size: 0.7rem; }
+        .step-detail { font-size: 0.75rem; color: #666; word-break: break-all; overflow-wrap: anywhere; }
+        .step-detail code { background: #eee; padding: 0.1rem 0.3rem; border-radius: 2px; font-size: 0.7rem; word-break: break-all; }
         .step-error { color: #d03030; font-size: 0.75rem; margin-top: 0.25rem; }
         .status-ok { color: #2a8a2a; }
         .status-err { color: #d03030; }
@@ -173,12 +173,12 @@
                     {{end}}
                     {{if $step.ReqBody}}
                     <div style="margin-top: 0.25rem; font-size: 0.7rem; color: #888;">
-                        请求体: <code>{{$step.ReqBody}}</code>
+                        请求体: <code style="display: block; margin-top: 0.15rem; word-break: break-all; white-space: pre-wrap;">{{$step.ReqBody}}</code>
                     </div>
                     {{end}}
                     {{if $step.RespBody}}
                     <div style="margin-top: 0.25rem; font-size: 0.7rem; color: #888;">
-                        响应体: <code>{{$step.RespBody}}</code>
+                        响应体: <code style="display: block; margin-top: 0.15rem; word-break: break-all; white-space: pre-wrap;">{{$step.RespBody}}</code>
                     </div>
                     {{end}}
                 </div>
