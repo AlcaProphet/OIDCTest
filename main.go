@@ -481,15 +481,25 @@ func (app *App) handleCallback(w http.ResponseWriter, r *http.Request) {
 	// 解码 ID Token
 	var idTokenHeader, idTokenClaims map[string]interface{}
 	if tokenResp.IDToken != "" {
-		idTokenHeader, idTokenClaims, _ = DecodeJWT(tokenResp.IDToken)
-		sess.DebugSteps = append(sess.DebugSteps, DebugStep{
-			Timestamp: time.Now(),
-			Name:      "ID Token 解码",
-			Method:    "-",
-			URL:       "-",
-			StatusCode: 200,
-			RespBody:   "成功解码 ID Token (Header + Payload)",
-		})
+		idTokenHeader, idTokenClaims, err = DecodeJWT(tokenResp.IDToken)
+		if err != nil {
+			sess.DebugSteps = append(sess.DebugSteps, DebugStep{
+				Timestamp: time.Now(),
+				Name:      "ID Token 解码",
+				Method:    "-",
+				URL:       "-",
+				Error:     "解码 ID Token 失败: " + err.Error(),
+			})
+		} else {
+			sess.DebugSteps = append(sess.DebugSteps, DebugStep{
+				Timestamp: time.Now(),
+				Name:      "ID Token 解码",
+				Method:    "-",
+				URL:       "-",
+				StatusCode: 200,
+				RespBody:   "成功解码 ID Token (Header + Payload)",
+			})
+		}
 	}
 
 	// 尝试解码 Access Token (如果是 JWT)

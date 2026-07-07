@@ -176,6 +176,11 @@
                         请求体: <code>{{$step.ReqBody}}</code>
                     </div>
                     {{end}}
+                    {{if $step.RespBody}}
+                    <div style="margin-top: 0.25rem; font-size: 0.7rem; color: #888;">
+                        响应体: <code>{{$step.RespBody}}</code>
+                    </div>
+                    {{end}}
                 </div>
                 {{end}}
             </div>
